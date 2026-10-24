@@ -16,14 +16,17 @@ Runs fully offline.
   lock cuts; loop length in bars sets the original BPM.
 - **Pattern styles** (5 variants each): As Played, Stepping, Two-Step (snare 2+4), Three-And, Halftime, Roller,
   Jungle. Density, Chaos, Fill, Mutate and New Take shape the result.
-- **Step grid** with per-step velocity, pitch, roll (2/3/4) and reverse lanes; lockable steps; slots A–D with chain.
+- **Step grid** with any number of stacked hits per step, per-hit velocity, pitch, roll (2/3/4) and reverse lanes,
+  lockable steps, slots A–D with chain, and pattern lengths of 1/2/4/8/12/16/32 bars (paged 4 bars at a time,
+  with fills every 8 bars).
+- **Undo / redo** (Ctrl+Z / Ctrl+Y), 25 steps deep.
 - **Per-slice** pitch, gain, pan, length and reverse; 16 keyboard pads with live record.
 - **Sampler character:** sample-rate reduction (32k–8k), 12-bit / 8-bit, mono.
 - **Mix FX:** LP/HP/BP filter with resonance, drive, compressor, room.
 - **Tempo:** song BPM with optional repitch (sampler-style) or fixed-pitch chops; swing and humanize.
 - **Export:** rendered WAV loop, MIDI (slice 1 = C1 / note 36; drag or click), or a zip kit of every slice + MIDI + loop.
 
-Keys: `Space` play/stop · `1-4 Q-R A-F Z-V` pads · `M` mutate · `N` new take · `Del` delete marker · `←/→` select slice.
+Keys: `Space` play/stop · `Ctrl+Z` undo · `Ctrl+Y` redo · `1-4 Q-R A-F Z-V` pads · `M` mutate · `N` new take · `Del` delete marker · `←/→` select slice.
 
 ## Build the exe
 
@@ -34,5 +37,5 @@ first build.
 powershell -ExecutionPolicy Bypass -File desktop\build.ps1
 ```
 
-Output: `dist\BreakTool.exe` (about 1 MB, with the web app embedded). At launch it unpacks to
-`%LOCALAPPDATA%\BreakTool`.
+Output: `dist\BreakTool.exe` (about 1 MB). The web app is embedded and served from memory; only the WebView2
+loader DLL and browser profile live in `%LOCALAPPDATA%\BreakTool`.

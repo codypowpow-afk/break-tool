@@ -26,7 +26,60 @@
     if (key === 'bits8') return S.bits === 8;
     return S[key];
   }
+  // ---------- undo / redo ----------
+  // Snapshots of everything an edit can change (patterns, slices, pattern settings).
+  // Calls with the same tag in quick succession (a knob drag, a paint stroke) merge into one step.
+  const UNDO_LIMIT = 25;
+  const UNDO_FIELDS = ['patterns', 'slices', 'editSlot', 'sel', 'manual', 'style', 'variant', 'patLen', 'origBpm', 'bars',
+    'sliceMode', 'evenCount', 'sensitivity', 'density', 'chaos', 'fill', 'seedSalt'];
+  const UNDO_KEYS = ['sliceMode', 'evenCount', 'sensitivity', 'bars', 'density', 'chaos', 'fill', 'patLen'];
+  const undoStack = [], redoStack = [];
+  let lastTag = null, lastTagTime = 0;
+  function snapshot() {
+    const snap = {};
+    UNDO_FIELDS.forEach((f) => { snap[f] = S[f]; });
+    return JSON.stringify(snap);
+  }
+  function checkpoint(tag) {
+    if (!S.src) return;
+    const now = performance.now();
+    if (tag && tag === lastTag && now - lastTagTime < 800) { lastTagTime = now; return; }
+    lastTag = tag; lastTagTime = now;
+    undoStack.push(snapshot());
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    redoStack.length = 0;
+    refreshUndoButtons();
+  }
+  function restore(json) {
+    Object.assign(S, JSON.parse(json));
+    computeSteps();
+    lastTag = null;
+    waveStaticDirty = true; dirty = true;
+    refreshControls();
+    refreshUndoButtons();
+  }
+  function undo() {
+    if (!undoStack.length) { toast('Nothing to undo'); return; }
+    redoStack.push(snapshot());
+    restore(undoStack.pop());
+    toast('Undo (' + undoStack.length + ' left)');
+  }
+  function redo() {
+    if (!redoStack.length) { toast('Nothing to redo'); return; }
+    undoStack.push(snapshot());
+    restore(redoStack.pop());
+    toast('Redo');
+  }
+  function clearHistory() { undoStack.length = 0; redoStack.length = 0; lastTag = null; refreshUndoButtons(); }
+  function refreshUndoButtons() {
+    $('#undoBtn').disabled = !undoStack.length;
+    $('#redoBtn').disabled = !redoStack.length;
+  }
+
   function set(key, v) {
+    // knob drags merge into one undo step; button clicks are one step each
+    const continuous = typeof v === 'number' && !!document.querySelector('.knob[data-key="' + key + '"]');
+    if (key.startsWith('slice.') || UNDO_KEYS.includes(key)) checkpoint(continuous ? key + ':' + S.sel : null);
     if (key.startsWith('slice.')) { const sl = S.slices[S.sel]; if (sl) sl[key.slice(6)] = v; }
     else if (key === 'bits12') S.bits = v ? 12 : 16;
     else if (key === 'bits8') S.bits = v ? 8 : 16;
@@ -145,6 +198,7 @@
     }[S.lane];
     refreshKnobs();
     renderPads();
+    renderPager();
   }
 
   // ---------- style buttons ----------
@@ -155,9 +209,9 @@
       el.className = 'style'; el.dataset.style = st.id;
       el.innerHTML = '<div class="sub">' + st.sub + '</div><button class="btn main">' + st.name + '</button><div class="vars">' +
         [1, 2, 3, 4, 5].map((v) => '<button class="btn" data-v="' + v + '">' + v + '</button>').join('') + '</div>';
-      $('.main', el).addEventListener('click', () => { S.style = st.id; regenerate(S.editSlot); refreshControls(); });
+      $('.main', el).addEventListener('click', () => { checkpoint(); S.style = st.id; regenerate(S.editSlot); refreshControls(); });
       $$('.vars button', el).forEach((b) => b.addEventListener('click', () => {
-        S.style = st.id; S.variant = +b.dataset.v; regenerate(S.editSlot); refreshControls();
+        checkpoint(); S.style = st.id; S.variant = +b.dataset.v; regenerate(S.editSlot); refreshControls();
       }));
       wrap.appendChild(el);
     });
@@ -200,6 +254,7 @@
     S.view = { a: 0, b: S.src.length };
     S.locked = false;
     reslice(true);
+    clearHistory();
     refreshControls();
   }
 
@@ -255,6 +310,7 @@
     let k = S.slices.findIndex((s) => s.pos > pos);
     if (k < 0) k = S.slices.length;
     if ((k > 0 && pos - S.slices[k - 1].pos < 64) || (k < S.slices.length && S.slices[k].pos - pos < 64)) return;
+    checkpoint();
     const info = BT.classify(S.src, [pos])[0];
     S.slices.splice(k, 0, makeSlice(pos, info));
     remapPatterns((s) => (s >= k ? s + 1 : s));
@@ -264,6 +320,7 @@
   }
   function deleteMarker(k) {
     if (k <= 0 || k >= S.slices.length) return;
+    checkpoint();
     S.slices.splice(k, 1);
     remapPatterns((s) => (s === k ? null : s > k ? s - 1 : s));
     S.manual = true; S.sel = Math.max(0, k - 1);
@@ -430,6 +487,7 @@
     const r = wave.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
     wave.style.cursor = y < TOP && markerAt(x, r.width) >= 0 ? 'ew-resize' : 'crosshair';
     if (!drag) return;
+    if (!drag.moved) checkpoint();
     const i = drag.i, lo = S.slices[i - 1].pos + 64, hi = i + 1 < S.slices.length ? S.slices[i + 1].pos - 64 : S.src.length - 64;
     S.slices[i].pos = Math.round(Math.max(lo, Math.min(hi, xToS(x, r.width))));
     drag.moved = true; dirty = true;
@@ -449,6 +507,7 @@
     const r = wave.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
     const i = y < TOP ? markerAt(x, r.width) : sliceAtSample(xToS(x, r.width));
     if (i < 0) return;
+    checkpoint();
     const sl = S.slices[i];
     sl.label = LABELS[(LABELS.indexOf(sl.label) + 1) % LABELS.length];
     S.sel = i; refreshControls(); dirty = true;
@@ -490,13 +549,34 @@
   const GHEAD = 16, GLEFT = 52;
   let playhead = null, gridDrag = null;
 
+  // Long patterns are shown 4 bars (one page) at a time.
+  const PAGE = 64;
+  function gridView() {
+    const pat = curPat();
+    const len = pat ? pat.steps.length : S.patLen * 16;
+    const pages = Math.max(1, Math.ceil(len / PAGE));
+    S.gridPage = Math.max(0, Math.min(pages - 1, S.gridPage || 0));
+    return { off: S.gridPage * PAGE, N: Math.min(PAGE, len), pages, len };
+  }
   function gridGeom() {
     const n = Math.max(1, S.slices.length);
     const rh = Math.max(6, Math.min(16, Math.floor(320 / n)));
     const W = grid.parentElement.clientWidth;
-    const pat = curPat();
-    const N = pat ? pat.steps.length : S.patLen * 16;
-    return { n, rh, W, H: GHEAD + n * rh, N, cw: (W - GLEFT) / N };
+    const v = gridView();
+    return { n, rh, W, H: GHEAD + n * rh, N: v.N, off: v.off, cw: (W - GLEFT) / v.N };
+  }
+  function setPage(p) {
+    const v = gridView();
+    const np = Math.max(0, Math.min(v.pages - 1, p));
+    if (np !== S.gridPage) { S.gridPage = np; dirty = true; }
+    renderPager();
+  }
+  function renderPager() {
+    const v = gridView();
+    $('#pager').style.display = v.pages > 1 ? '' : 'none';
+    const a = S.gridPage * 4 + 1;
+    $('#pageLabel').textContent = 'BARS ' + a + '-' + Math.min(v.len / 16, a + 3) + ' / ' + v.len / 16;
+    $('#followBtn').classList.toggle('on', S.follow);
   }
 
   function drawGrid() {
@@ -513,7 +593,7 @@
       const x = GLEFT + i * g.cw;
       c.fillStyle = Math.floor(i / 4) % 2 === 0 ? '#182a15' : '#142012';
       c.fillRect(x, GHEAD, g.cw, g.H - GHEAD);
-      if (pat && pat.locks[i]) { c.fillStyle = 'rgba(255,209,102,.10)'; c.fillRect(x, GHEAD, g.cw, g.H - GHEAD); }
+      if (pat && pat.locks[g.off + i]) { c.fillStyle = 'rgba(255,209,102,.10)'; c.fillRect(x, GHEAD, g.cw, g.H - GHEAD); }
     }
     // rows
     c.font = 'bold ' + Math.min(10, g.rh - 1) + 'px Consolas';
@@ -537,23 +617,24 @@
     c.fillStyle = '#0d150b'; c.fillRect(GLEFT, 0, g.W - GLEFT, GHEAD);
     c.font = 'bold 9px Consolas';
     for (let i = 0; i < g.N; i++) {
-      const x = GLEFT + i * g.cw;
-      const locked = pat && pat.locks[i];
+      const x = GLEFT + i * g.cw, a = g.off + i;
+      const locked = pat && pat.locks[a];
       if (locked) { c.fillStyle = '#ffd166'; c.fillRect(x + 1, 2, g.cw - 2, GHEAD - 4); }
-      if (g.cw > 13 || i % 4 === 0) {
-        c.fillStyle = locked ? '#111' : i % 4 === 0 ? '#b8e35a' : '#4f6b46';
-        c.fillText(i % 4 === 0 ? String(i / 4 + 1) : '·', x + 3, GHEAD - 4);
+      if (g.cw > 13 || a % 4 === 0) {
+        // bar number on the downbeat, beat number (2-4) on other beats
+        c.fillStyle = locked ? '#111' : a % 16 === 0 ? '#b8e35a' : a % 4 === 0 ? '#6f8f63' : '#4f6b46';
+        c.fillText(a % 16 === 0 ? String(a / 16 + 1) : a % 4 === 0 ? '.' + ((a % 16) / 4 + 1) : '·', x + 3, GHEAD - 4);
       }
     }
     c.fillStyle = '#8aa57f'; c.fillText(['A', 'B', 'C', 'D'][S.editSlot] + ' ' + (pat ? pat.steps.length / 16 : 0) + 'BAR', 4, GHEAD - 4);
     // playhead
-    if (playhead && S.playing && playhead.slot === S.editSlot) {
+    if (playhead && S.playing && playhead.slot === S.editSlot && playhead.step >= g.off && playhead.step < g.off + g.N) {
       c.fillStyle = 'rgba(210,60,44,.35)';
-      c.fillRect(GLEFT + playhead.step * g.cw, 0, g.cw, g.H);
+      c.fillRect(GLEFT + (playhead.step - g.off) * g.cw, 0, g.cw, g.H);
     }
     // cells
     if (!pat) return;
-    pat.steps.forEach((step, i) => step.forEach((st) => {
+    pat.steps.slice(g.off, g.off + g.N).forEach((step, i) => step.forEach((st) => {
       if (!S.slices[st.s]) return;
       const x = GLEFT + i * g.cw + 1, y = GHEAD + st.s * g.rh + 1, w = g.cw - 2, h = g.rh - 2;
       c.globalAlpha = 0.35 + 0.65 * st.v;
@@ -572,16 +653,17 @@
   function gridCell(e) {
     const r = grid.getBoundingClientRect(), g = gridGeom();
     const x = e.clientX - r.left, y = e.clientY - r.top;
-    return { col: Math.floor((x - GLEFT) / g.cw), row: Math.floor((y - GHEAD) / g.rh), head: y < GHEAD, left: x < GLEFT, g };
+    return { col: g.off + Math.floor((x - GLEFT) / g.cw), row: Math.floor((y - GHEAD) / g.rh), head: y < GHEAD, left: x < GLEFT, g };
   }
   grid.addEventListener('pointerdown', (e) => {
     const pat = curPat();
     if (!pat || !S.slices.length) return;
     const p = gridCell(e);
     if (p.left) { if (p.row >= 0 && p.row < S.slices.length) selectSlice(p.row, true); return; }
-    if (p.col < 0 || p.col >= p.g.N) return;
-    if (p.head) { pat.locks[p.col] = !pat.locks[p.col]; dirty = true; return; }
+    if (p.col < p.g.off || p.col >= p.g.off + p.g.N) return;
+    if (p.head) { checkpoint(); pat.locks[p.col] = !pat.locks[p.col]; dirty = true; return; }
     if (p.row < 0 || p.row >= S.slices.length) return;
+    checkpoint();
     gridDrag = { mode: pat.steps[p.col].some((h) => h.s === p.row) ? 'erase' : 'paint', last: -1 };
     grid.setPointerCapture(e.pointerId);
     applyGrid(p);
@@ -601,7 +683,8 @@
   grid.addEventListener('pointerup', () => { gridDrag = null; refreshControls(); });
   function applyGrid(p) {
     const pat = curPat();
-    if (p.col < 0 || p.col >= pat.steps.length || p.row < 0 || p.row >= S.slices.length) return;
+    const v = gridView();
+    if (p.col < v.off || p.col >= Math.min(pat.steps.length, v.off + v.N) || p.row < 0 || p.row >= S.slices.length) return;
     const key = p.col * 1000 + p.row;
     if (key === gridDrag.last) return;
     gridDrag.last = key;
@@ -627,14 +710,14 @@
     const c = lctx; c.setTransform(dpr(), 0, 0, dpr(), 0, 0);
     c.fillStyle = '#142012'; c.fillRect(0, 0, W, H);
     const pat = curPat(); if (!pat) return;
-    const N = pat.steps.length, cw = (W - GLEFT) / N;
+    const v = gridView(), N = v.N, cw = (W - GLEFT) / N;
     c.fillStyle = '#8aa57f'; c.font = 'bold 10px Consolas';
     c.fillText(S.lane.toUpperCase(), 6, 14);
     if (S.lane === 'pitch') { c.strokeStyle = '#2b4225'; c.beginPath(); c.moveTo(GLEFT, H / 2 + 0.5); c.lineTo(W, H / 2 + 0.5); c.stroke(); }
     for (let i = 0; i < N; i++) {
       const x = GLEFT + i * cw;
       if (i % 4 === 0) { c.strokeStyle = i % 16 === 0 ? '#4d6e42' : '#2b4225'; c.beginPath(); c.moveTo(Math.round(x) + 0.5, 0); c.lineTo(Math.round(x) + 0.5, H); c.stroke(); }
-      const hits = pat.steps[i].filter((h) => S.slices[h.s]);
+      const hits = pat.steps[v.off + i].filter((h) => S.slices[h.s]);
       const sw = (cw - 3) / Math.max(1, hits.length);
       hits.forEach((st, j) => {
         const hx = x + 2 + j * sw, hw = Math.max(1, sw - 1);
@@ -654,9 +737,10 @@
   function laneApply(e) {
     const pat = curPat(); if (!pat) return;
     const r = lane.getBoundingClientRect(), W = r.width, H = r.height;
-    const N = pat.steps.length, cw = (W - GLEFT) / N;
+    const v = gridView(), cw = (W - GLEFT) / v.N;
     const fx = (e.clientX - r.left - GLEFT) / cw, col = Math.floor(fx);
-    const hits = (pat.steps[col] || []).filter((h) => S.slices[h.s]);
+    if (col < 0 || col >= v.N) return;
+    const hits = (pat.steps[v.off + col] || []).filter((h) => S.slices[h.s]);
     if (!hits.length) return;
     // stacked hits split the step into sub-columns; pick the one under the pointer
     const st = hits[Math.max(0, Math.min(hits.length - 1, Math.floor((fx - col) * hits.length)))];
@@ -670,7 +754,7 @@
     }
     pat.edited = true; dirty = true;
   }
-  lane.addEventListener('pointerdown', (e) => { laneDrag = {}; lane.setPointerCapture(e.pointerId); laneApply(e); });
+  lane.addEventListener('pointerdown', (e) => { checkpoint(); laneDrag = {}; lane.setPointerCapture(e.pointerId); laneApply(e); });
   lane.addEventListener('pointermove', (e) => { if (laneDrag) laneApply(e); });
   lane.addEventListener('pointerup', () => { laneDrag = null; });
 
@@ -709,6 +793,7 @@
       const pos = E.position(), pat = S.patterns[pos.slot];
       if (pat) {
         const step = Math.round(pos.step) % pat.steps.length;
+        checkpoint('rec');
         addHit(pat.steps[step], i);
         pat.edited = true; dirty = true;
       }
@@ -721,6 +806,7 @@
     while (E.queue.length && E.queue[0].time <= now) {
       const q = E.queue.shift();
       playhead = q;
+      if (S.follow && q.slot === S.editSlot && Math.floor(q.step / PAGE) !== S.gridPage) setPage(Math.floor(q.step / PAGE));
       q.voices.forEach((v) => { hot = { slice: v.slice, end: v.end }; flashPad(v.slice); });
       dirty = true;
     }
@@ -775,11 +861,11 @@
     $('#fileInput').addEventListener('change', (e) => { loadFiles(Array.from(e.target.files)); e.target.value = ''; });
     $('#breakSelect').addEventListener('change', (e) => selectBreak(+e.target.value));
     $('#lockBtn').addEventListener('click', () => { S.locked = !S.locked; refreshControls(); dirty = true; });
-    $('#resetBtn').addEventListener('click', () => { if (S.locked) { toast('Cuts are locked'); return; } reslice(); refreshControls(); });
+    $('#resetBtn').addEventListener('click', () => { if (S.locked) { toast('Cuts are locked'); return; } checkpoint(); reslice(); refreshControls(); });
     $('#repitchBtn').addEventListener('click', () => { S.repitch = !S.repitch; refreshControls(); });
     $('#origBpm').addEventListener('change', (e) => {
       const v = parseFloat(e.target.value);
-      if (v > 40 && v < 400) { S.origBpm = v; computeSteps(); regenerateAll(); waveStaticDirty = true; dirty = true; }
+      if (v > 40 && v < 400) { checkpoint(); S.origBpm = v; computeSteps(); regenerateAll(); waveStaticDirty = true; dirty = true; }
       refreshControls();
     });
     $('#songBpm').addEventListener('change', (e) => {
@@ -796,19 +882,27 @@
     }));
     $('#copyBtn').addEventListener('click', () => {
       const p = curPat(); if (!p) return;
+      checkpoint();
       const to = (S.editSlot + 1) % 4;
       S.patterns[to] = JSON.parse(JSON.stringify(p));
       S.editSlot = to; refreshControls(); dirty = true;
       toast('Copied to slot ' + 'ABCD'[to]);
     });
     $('#mutateBtn').addEventListener('click', mutate);
+    $('#undoBtn').addEventListener('click', undo);
+    $('#pagePrev').addEventListener('click', () => setPage(S.gridPage - 1));
+    $('#pageNext').addEventListener('click', () => setPage(S.gridPage + 1));
+    $('#followBtn').addEventListener('click', () => { S.follow = !S.follow; renderPager(); });
+    $('#redoBtn').addEventListener('click', redo);
     $('#newSeedBtn').addEventListener('click', newTake);
     $('#clearBtn').addEventListener('click', () => {
       const p = curPat(); if (!p) return;
+      checkpoint();
       p.steps = p.steps.map((st, i) => (p.locks[i] ? st : [])); p.edited = true; dirty = true; refreshControls();
     });
     $$('#labelSeg button').forEach((b) => b.addEventListener('click', () => {
       const sl = S.slices[S.sel]; if (!sl) return;
+      checkpoint();
       sl.label = b.dataset.v; refreshControls(); dirty = true;
     }));
 
@@ -849,13 +943,19 @@
 
   function mutate() {
     const p = curPat(); if (!p) return;
+    checkpoint();
     BT.mutate(p, S.slices, srcSteps, S.chaos, (Math.random() * 1e9) | 0);
     dirty = true;
   }
-  function newTake() { S.seedSalt++; regenerate(S.editSlot); }
+  function newTake() { checkpoint(); S.seedSalt++; regenerate(S.editSlot); }
 
   // ---------- keyboard ----------
   document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.target.tagName !== 'INPUT') {
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+      if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); return; }
+    }
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.ctrlKey || e.metaKey) return;
     const k = e.key.toLowerCase();
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); return; }
@@ -886,6 +986,7 @@
   // ---------- boot ----------
   initKnobs(); initSegs(); initStyles(); initButtons();
   refreshControls();
+  refreshUndoButtons();
   requestAnimationFrame(frame);
   // ?load=a.wav,b.wav works when served over http (file:// blocks fetch)
   const q = new URLSearchParams(location.search).get('load');

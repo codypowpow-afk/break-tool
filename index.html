@@ -12,6 +12,8 @@
     <div class="brand"><span class="logo">BREAK TOOL</span><span class="by">dnb chop sequencer</span></div>
     <div class="top-buttons">
       <button id="playBtn" class="btn red wide" title="Space">PLAY</button>
+      <button id="undoBtn" class="btn" title="Undo (Ctrl+Z)">UNDO</button>
+      <button id="redoBtn" class="btn" title="Redo (Ctrl+Y / Ctrl+Shift+Z)">REDO</button>
       <button id="recBtn" class="btn" title="Record pad hits into the pattern while playing">REC</button>
       <button id="midiBtn" class="btn" draggable="true" title="Drag into your DAW, or click to download">DRAG MIDI</button>
       <button id="wavBtn" class="btn" title="Render the pattern (or chain) to a WAV loop">EXPORT WAV</button>
@@ -100,7 +102,7 @@
     <div class="row">
       <div class="group">
         <div class="glabel">LENGTH</div>
-        <div class="seg" data-key="patLen" data-num><button data-v="1">1 BAR</button><button data-v="2">2</button><button data-v="4">4</button></div>
+        <div class="seg" data-key="patLen" data-num><button data-v="1">1 BAR</button><button data-v="2">2</button><button data-v="4">4</button><button data-v="8">8</button><button data-v="12">12</button><button data-v="16">16</button><button data-v="32">32</button></div>
       </div>
       <div class="group">
         <div class="glabel">GENERATE</div>
@@ -113,9 +115,15 @@
       </div>
       <div class="spacer"></div>
       <div class="knob" data-key="density" data-label="DENSITY" data-min="0" data-max="1" data-def="0.5"></div>
-      <div class="knob" data-key="chaos" data-label="CHAOS" data-min="0" data-max="1" data-def="0.15"></div>
+      <div class="knob" data-key="chaos" data-label="CHAOS" data-min="0" data-max="1" data-def="0"></div>
       <div class="knob" data-key="swing" data-label="SWING" data-min="0" data-max="0.6" data-def="0"></div>
       <div class="knob" data-key="human" data-label="HUMANIZE" data-min="0" data-max="1" data-def="0"></div>
+    </div>
+    <div class="pager" id="pager">
+      <button class="btn" id="pagePrev" title="Previous 4 bars">&#9664;</button>
+      <span class="lcd-inline" id="pageLabel"></span>
+      <button class="btn" id="pageNext" title="Next 4 bars">&#9654;</button>
+      <button class="btn" id="followBtn" title="Page along with the playhead">FOLLOW</button>
     </div>
     <div class="grid-wrap">
       <canvas id="grid"></canvas>
@@ -160,7 +168,7 @@
   </section>
 
   <footer class="keys">
-    <b>Space</b> play/stop · <b>1-4 Q-R A-F Z-V</b> pads · <b>M</b> mutate · <b>N</b> new take · <b>Del</b> delete selected marker · <b>←/→</b> select slice · MIDI notes start at C1 (36) = slice 1
+    <b>Space</b> play/stop · <b>Ctrl+Z</b> undo · <b>Ctrl+Y</b> redo · <b>1-4 Q-R A-F Z-V</b> pads · <b>M</b> mutate · <b>N</b> new take · <b>Del</b> delete selected marker · <b>←/→</b> select slice · MIDI notes start at C1 (36) = slice 1
   </footer>
 </div>
 <div id="toast"></div>

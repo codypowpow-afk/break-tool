@@ -15,8 +15,9 @@ window.BT = window.BT || {};
     // playback
     choke: true, fade: 0.15, volume: 0.8, swing: 0, human: 0,
     // pattern
-    style: 'twostep', variant: 1, density: 0.5, chaos: 0.15, fill: false, seedSalt: 0,
+    style: 'twostep', variant: 1, density: 0.5, chaos: 0, fill: false, seedSalt: 0,
     patterns: [null, null, null, null], editSlot: 0, playSlot: 0, chain: false, patLen: 2,
+    gridPage: 0, follow: true,
     lane: 'vel',
     // sampler
     rate: 0, bits: 16, mono: false,

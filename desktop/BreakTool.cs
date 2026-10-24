@@ -1,6 +1,7 @@
-// Standalone Windows shell for Break Tool.
-// The web app (index.html, style.css, js/*) and the WebView2 SDK are embedded in the exe;
-// on launch they are unpacked to %LOCALAPPDATA%\BreakTool and shown in an Edge WebView2 window.
+﻿// Standalone Windows shell for Break Tool.
+// The web app (index.html, style.css, js/*) and the WebView2 SDK are embedded in the exe.
+// Pages are served from those resources into an Edge WebView2 window; only the native
+// WebView2Loader.dll is unpacked to %LOCALAPPDATA%\BreakTool (next to the browser profile).
 // Built with the C# compiler that ships with .NET Framework 4.x (see build.ps1), so stick to C# 5.
 using System;
 using System.Drawing;
@@ -12,8 +13,8 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("Break Tool")]
 [assembly: AssemblyProduct("Break Tool")]
 [assembly: AssemblyDescription("DnB break chopper and pattern sequencer")]
-[assembly: AssemblyVersion("1.1.0.0")]
-[assembly: AssemblyFileVersion("1.1.0.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
 
 namespace BreakTool
 {
@@ -58,16 +59,14 @@ namespace BreakTool
             }
         }
 
-        // Writes every "web/..." resource to DataDir\app and the native loader to DataDir.
+        // Writes the native WebView2 loader to DataDir (it has to exist as a file to be loaded).
         static void Unpack()
         {
             Assembly asm = Assembly.GetExecutingAssembly();
             foreach (string res in asm.GetManifestResourceNames())
             {
-                string target;
-                if (res.StartsWith("web/")) target = Path.Combine(DataDir, "app", res.Substring(4).Replace('/', Path.DirectorySeparatorChar));
-                else if (res == "native/WebView2Loader.dll") target = Path.Combine(DataDir, "WebView2Loader.dll");
-                else continue;
+                if (res != "native/WebView2Loader.dll") continue;
+                string target = Path.Combine(DataDir, "WebView2Loader.dll");
                 Directory.CreateDirectory(Path.GetDirectoryName(target));
                 using (Stream s = asm.GetManifestResourceStream(res))
                 using (MemoryStream ms = new MemoryStream())
@@ -118,6 +117,17 @@ namespace BreakTool
             Load += OnLoad;
         }
 
+        static string MimeType(string path)
+        {
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            if (ext == ".html") return "text/html; charset=utf-8";
+            if (ext == ".css") return "text/css; charset=utf-8";
+            if (ext == ".js") return "text/javascript; charset=utf-8";
+            if (ext == ".png") return "image/png";
+            if (ext == ".svg") return "image/svg+xml";
+            return "application/octet-stream";
+        }
+
         async void OnLoad(object sender, EventArgs e)
         {
             try
@@ -129,8 +139,23 @@ namespace BreakTool
                 core.Settings.IsStatusBarEnabled = false;
                 core.Settings.AreDevToolsEnabled = false;
                 core.Settings.IsZoomControlEnabled = true;
-                core.SetVirtualHostNameToFolderMapping("breaktool.local", Path.Combine(Program.DataDir, "app"),
-                    Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
+                // Serve the app straight from the exe's embedded resources (no files on disk to
+                // be locked, quarantined or blocked by folder permissions).
+                core.AddWebResourceRequestedFilter("https://breaktool.local/*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All);
+                core.WebResourceRequested += delegate (object s, Microsoft.Web.WebView2.Core.CoreWebView2WebResourceRequestedEventArgs args)
+                {
+                    string path = new Uri(args.Request.Uri).AbsolutePath.TrimStart('/');
+                    if (path.Length == 0) path = "index.html";
+                    Stream res = Assembly.GetExecutingAssembly().GetManifestResourceStream("web/" + Uri.UnescapeDataString(path));
+                    if (res == null)
+                    {
+                        args.Response = env.CreateWebResourceResponse(null, 404, "Not Found", "");
+                        return;
+                    }
+                    MemoryStream ms = new MemoryStream();
+                    res.CopyTo(ms); res.Dispose(); ms.Position = 0;
+                    args.Response = env.CreateWebResourceResponse(ms, 200, "OK", "Content-Type: " + MimeType(path) + "\r\nCache-Control: no-cache");
+                };
                 core.DocumentTitleChanged += delegate { Text = core.DocumentTitle; };
                 core.Navigate("https://breaktool.local/index.html");
             }
