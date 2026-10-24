@@ -31,8 +31,8 @@
   // Calls with the same tag in quick succession (a knob drag, a paint stroke) merge into one step.
   const UNDO_LIMIT = 25;
   const UNDO_FIELDS = ['patterns', 'slices', 'editSlot', 'sel', 'manual', 'style', 'variant', 'patLen', 'origBpm', 'bars',
-    'sliceMode', 'evenCount', 'sensitivity', 'density', 'chaos', 'fill', 'seedSalt'];
-  const UNDO_KEYS = ['sliceMode', 'evenCount', 'sensitivity', 'bars', 'density', 'chaos', 'fill', 'patLen'];
+    'sliceMode', 'evenCount', 'sensitivity', 'density', 'chaos', 'fill', 'seedSalt', 'fillType', 'fillLen', 'fillEvery'];
+  const UNDO_KEYS = ['sliceMode', 'evenCount', 'sensitivity', 'bars', 'density', 'chaos', 'fill', 'patLen', 'fillType', 'fillLen', 'fillEvery'];
   const undoStack = [], redoStack = [];
   let lastTag = null, lastTagTime = 0;
   function snapshot() {
@@ -101,6 +101,7 @@
       case 'rate': case 'bits12': case 'bits8': case 'mono':
         E.rebuildProcessed(); waveStaticDirty = true; break;
       case 'density': case 'chaos': case 'fill': regenerate(S.editSlot); break;
+      case 'fillType': case 'fillLen': case 'fillEvery': S.fill = true; regenerate(S.editSlot); break;
       case 'patLen': resizePattern(); break;
     }
   }
@@ -208,7 +209,7 @@
       const el = document.createElement('div');
       el.className = 'style'; el.dataset.style = st.id;
       el.innerHTML = '<div class="sub">' + st.sub + '</div><button class="btn main">' + st.name + '</button><div class="vars">' +
-        [1, 2, 3, 4, 5].map((v) => '<button class="btn" data-v="' + v + '">' + v + '</button>').join('') + '</div>';
+        Array.from({ length: BT.VARIANTS }, (_, k) => k + 1).map((v) => '<button class="btn" data-v="' + v + '">' + v + '</button>').join('') + '</div>';
       $('.main', el).addEventListener('click', () => { checkpoint(); S.style = st.id; regenerate(S.editSlot); refreshControls(); });
       $$('.vars button', el).forEach((b) => b.addEventListener('click', () => {
         checkpoint(); S.style = st.id; S.variant = +b.dataset.v; regenerate(S.editSlot); refreshControls();
@@ -330,7 +331,8 @@
 
   // ---------- patterns ----------
   function genOpts(style, variant, prev) {
-    return { style, variant, bars: S.patLen, density: S.density, chaos: S.chaos, fill: S.fill, salt: S.seedSalt, prev };
+    return { style, variant, bars: S.patLen, density: S.density, chaos: S.chaos, fill: S.fill,
+      fillType: S.fillType, fillLen: S.fillLen, fillEvery: S.fillEvery, salt: S.seedSalt, prev };
   }
   function regenerate(slot) {
     if (!S.slices.length) return;

@@ -14,8 +14,14 @@ Runs fully offline.
 
 - **Slicing:** auto (onset detection with sensitivity) or even 8/16/32/64; drag, add, delete and relabel markers;
   lock cuts; loop length in bars sets the original BPM.
-- **Pattern styles** (5 variants each): As Played, Stepping, Two-Step (snare 2+4), Three-And, Halftime, Roller,
-  Jungle. Density, Chaos, Fill, Mutate and New Take shape the result.
+- **28 pattern styles** (10 variants each), all mapped onto your break at DnB tempo:
+  - DnB: As Played, Stepping, Two-Step (snare 2+4), Three-And, Halftime, Roller, Jungle
+  - Club / world: Four-Floor, Breakbeat, Trap, Dembow, Afrobeats, Clave, Baile Funk
+  - EDM / dance: Dubstep, UK Garage, Electro, Jersey Club, Footwork, Gqom, Hardstyle
+  - Other common: Rock, Shuffle, Reggae, Hip-Hop, Samba, Motown, Metal
+  Density, Chaos, Mutate and New Take shape the result.
+- **Fills:** 10 fill types (or Auto to follow the variant), 1 beat / 2 beats / 1 bar long, every 2 / 4 / 8 bars or
+  only at the end.
 - **Step grid** with any number of stacked hits per step, per-hit velocity, pitch, roll (2/3/4) and reverse lanes,
   lockable steps, slots A–D with chain, and pattern lengths of 1/2/4/8/12/16/32 bars (paged 4 bars at a time,
   with fills every 8 bars).

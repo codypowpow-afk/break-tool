@@ -107,11 +107,27 @@
       <div class="group">
         <div class="glabel">GENERATE</div>
         <div class="seg">
-          <button class="toggle" data-key="fill" title="Snare-roll fill on the last beat">FILL</button>
+          <button class="toggle" data-key="fill" title="Add fills at phrase ends">FILL</button>
           <button id="mutateBtn" title="Randomly vary the current pattern (M)">MUTATE</button>
           <button id="newSeedBtn" title="Same style, new take (N)">NEW TAKE</button>
           <button id="clearBtn">CLEAR</button>
         </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="group">
+        <div class="glabel">FILL TYPE</div>
+        <div class="seg small" data-key="fillType" data-num>
+          <button data-v="0" title="Follow the pattern variant">AUTO</button><button data-v="1" title="Snare build into a 4-roll">1</button><button data-v="2" title="Ghost run into a roll">2</button><button data-v="3" title="Syncopated with a reverse snare">3</button><button data-v="4" title="Kick/snare trade with rolls">4</button><button data-v="5" title="Rising snare run">5</button><button data-v="6" title="Straight 16th snares">6</button><button data-v="7" title="Kick-snare call and response">7</button><button data-v="8" title="Reversed snares">8</button><button data-v="9" title="Amen-style alt snare run">9</button><button data-v="10" title="Drop out, then two snares">10</button>
+        </div>
+      </div>
+      <div class="group">
+        <div class="glabel">FILL LENGTH</div>
+        <div class="seg small" data-key="fillLen" data-num><button data-v="4">1 BEAT</button><button data-v="8">2 BEATS</button><button data-v="16">1 BAR</button></div>
+      </div>
+      <div class="group">
+        <div class="glabel">FILL EVERY</div>
+        <div class="seg small" data-key="fillEvery" data-num><button data-v="2">2 BARS</button><button data-v="4">4</button><button data-v="8">8</button><button data-v="0">END</button></div>
       </div>
       <div class="spacer"></div>
       <div class="knob" data-key="density" data-label="DENSITY" data-min="0" data-max="1" data-def="0.5"></div>
