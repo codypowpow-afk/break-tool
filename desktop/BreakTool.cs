@@ -12,8 +12,8 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("Break Tool")]
 [assembly: AssemblyProduct("Break Tool")]
 [assembly: AssemblyDescription("DnB break chopper and pattern sequencer")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
 
 namespace BreakTool
 {

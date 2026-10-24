@@ -59,13 +59,18 @@ window.BT = window.BT || {};
     c.wet = ctx.createGain();
     c.verb = ctx.createConvolver(); c.verb.buffer = impulse(ctx, 1.4);
     c.master = ctx.createGain();
+    // brickwall-ish safety limiter: stacked hits on one step can sum well past 0 dBFS
+    c.limiter = ctx.createDynamicsCompressor();
+    c.limiter.threshold.value = -1.5; c.limiter.knee.value = 0; c.limiter.ratio.value = 20;
+    c.limiter.attack.value = 0.001; c.limiter.release.value = 0.08;
     c.input.connect(c.shaper); c.shaper.connect(c.filter); c.filter.connect(c.comp);
     c.comp.connect(c.makeup); c.makeup.connect(c.dry); c.makeup.connect(c.verb);
     c.verb.connect(c.wet); c.dry.connect(c.master); c.wet.connect(c.master);
+    c.master.connect(c.limiter);
     if (withAnalyser) {
       c.analyser = ctx.createAnalyser(); c.analyser.fftSize = 1024;
-      c.master.connect(c.analyser); c.analyser.connect(out);
-    } else c.master.connect(out);
+      c.limiter.connect(c.analyser); c.analyser.connect(out);
+    } else c.limiter.connect(out);
     return c;
   };
 
@@ -148,22 +153,30 @@ window.BT = window.BT || {};
     } catch (e) { /* already stopped */ }
   };
 
-  // Schedules one pattern step. ctxState carries the last voice (for choke) and a humanize RNG.
+  // Schedules one pattern step (an array of hits that sound together). ctxState carries the
+  // voices of the previous step (for choke) and a humanize RNG. Choke cuts hits from earlier
+  // steps, never hits stacked on the same step.
   E.scheduleStep = function (ctx, dest, step, t, stepDur, ctxState, bufs) {
-    if (!step || step.s == null || !S.slices[step.s]) return [];
-    const n = step.roll || 1;
+    const hits = (step || []).filter((h) => h && S.slices[h.s]);
+    if (!hits.length) return [];
+    if (S.choke) (ctxState.last || []).forEach((v) => E.chokeVoice(v, t));
     const voices = [];
-    for (let k = 0; k < n; k++) {
-      const tt = t + (k * stepDur) / n;
-      let vel = step.v * (n > 1 ? 0.55 + (0.45 * (k + 1)) / n : 1);
-      if (S.human) vel *= 1 - ctxState.rng() * S.human * 0.35;
-      if (S.choke) E.chokeVoice(ctxState.last, tt);
-      const voice = E.playSlice(ctx, dest, step.s, tt, {
-        vel, pitch: step.p, rev: step.r, maxDur: n > 1 ? stepDur / n : 0,
-        buf: bufs && bufs.buf, rbuf: bufs && bufs.rbuf,
-      });
-      if (voice) { ctxState.last = voice; voices.push(voice); }
-    }
+    hits.forEach((hit) => {
+      const n = hit.roll || 1;
+      let prev = null;
+      for (let k = 0; k < n; k++) {
+        const tt = t + (k * stepDur) / n;
+        let vel = hit.v * (n > 1 ? 0.55 + (0.45 * (k + 1)) / n : 1);
+        if (S.human) vel *= 1 - ctxState.rng() * S.human * 0.35;
+        if (S.choke) E.chokeVoice(prev, tt);
+        const voice = E.playSlice(ctx, dest, hit.s, tt, {
+          vel, pitch: hit.p, rev: hit.r, maxDur: n > 1 ? stepDur / n : 0,
+          buf: bufs && bufs.buf, rbuf: bufs && bufs.rbuf,
+        });
+        if (voice) { prev = voice; voices.push(voice); }
+      }
+    });
+    ctxState.last = voices;
     return voices;
   };
 
@@ -186,7 +199,7 @@ window.BT = window.BT || {};
     if (!S.chain) return S.editSlot;
     for (let k = 1; k <= 4; k++) {
       const s = (cur + k) % 4;
-      if (S.patterns[s] && S.patterns[s].steps.some((x) => x)) return s;
+      if (S.patterns[s] && S.patterns[s].steps.some((x) => x.length)) return s;
     }
     return cur;
   }
@@ -223,7 +236,7 @@ window.BT = window.BT || {};
     clearInterval(timer); timer = null;
     const t = E.ctx.currentTime;
     E.queue.forEach((q) => q.voices.forEach((v) => E.chokeVoice(v, t)));
-    E.chokeVoice(liveState.last, t);
+    (liveState.last || []).forEach((v) => E.chokeVoice(v, t));
     E.queue = [];
   };
 

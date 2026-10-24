@@ -126,7 +126,7 @@
     $$('#slotSeg button').forEach((b) => {
       const i = +b.dataset.v;
       b.classList.toggle('on', i === S.editSlot);
-      b.style.opacity = S.patterns[i] && S.patterns[i].steps.some((x) => x) ? 1 : 0.6;
+      b.style.opacity = S.patterns[i] && S.patterns[i].steps.some((x) => x.length) ? 1 : 0.6;
     });
     const sl = S.slices[S.sel];
     $('#selName').textContent = sl ? String(S.sel + 1).padStart(2, '0') + ' · ' + sl.label : '--';
@@ -244,11 +244,9 @@
   function remapPatterns(fn) {
     S.patterns.forEach((p) => {
       if (!p) return;
-      p.steps = p.steps.map((st) => {
-        if (!st) return st;
-        const s = fn(st.s);
-        return s == null ? null : Object.assign(st, { s });
-      });
+      p.steps = p.steps.map((step) => step
+        .map((h) => { const s = fn(h.s); return s == null ? null : Object.assign(h, { s }); })
+        .filter((h) => h));
     });
   }
 
@@ -297,8 +295,7 @@
     const N = S.patLen * 16, old = p.steps.length;
     const steps = [], locks = [];
     for (let i = 0; i < N; i++) {
-      const st = p.steps[i % old];
-      steps.push(st && Object.assign({}, st));
+      steps.push(BT.copyStep(p.steps[i % old]));
       locks.push(i < old ? p.locks[i] : false);
     }
     p.steps = steps; p.locks = locks; dirty = true;
@@ -556,8 +553,8 @@
     }
     // cells
     if (!pat) return;
-    pat.steps.forEach((st, i) => {
-      if (!st || !S.slices[st.s]) return;
+    pat.steps.forEach((step, i) => step.forEach((st) => {
+      if (!S.slices[st.s]) return;
       const x = GLEFT + i * g.cw + 1, y = GHEAD + st.s * g.rh + 1, w = g.cw - 2, h = g.rh - 2;
       c.globalAlpha = 0.35 + 0.65 * st.v;
       c.fillStyle = LCOL[S.slices[st.s].label];
@@ -569,7 +566,7 @@
       }
       if (st.r) { c.fillStyle = '#111'; c.beginPath(); c.moveTo(x + 2, y + h / 2); c.lineTo(x + Math.min(8, w - 2), y + 1); c.lineTo(x + Math.min(8, w - 2), y + h - 1); c.fill(); }
       if (st.p && g.rh >= 10) { c.fillStyle = '#111'; c.font = 'bold 8px Consolas'; c.fillText((st.p > 0 ? '+' : '') + st.p, x + w - 14, y + h - 1); }
-    });
+    }));
   }
 
   function gridCell(e) {
@@ -585,15 +582,21 @@
     if (p.col < 0 || p.col >= p.g.N) return;
     if (p.head) { pat.locks[p.col] = !pat.locks[p.col]; dirty = true; return; }
     if (p.row < 0 || p.row >= S.slices.length) return;
-    const cur = pat.steps[p.col];
-    gridDrag = { mode: cur && cur.s === p.row ? 'erase' : 'paint', last: -1 };
+    gridDrag = { mode: pat.steps[p.col].some((h) => h.s === p.row) ? 'erase' : 'paint', last: -1 };
     grid.setPointerCapture(e.pointerId);
     applyGrid(p);
+    gridDrag.from = p;
     if (gridDrag.mode === 'paint') { S.sel = p.row; if (!S.playing) selectSlice(p.row, true); else refreshControls(); }
   });
   grid.addEventListener('pointermove', (e) => {
     if (!gridDrag) return;
-    applyGrid(gridCell(e));
+    // fill every cell between pointer events so fast drags don't skip rows/steps
+    const p = gridCell(e), from = gridDrag.from || p;
+    const n = Math.max(Math.abs(p.col - from.col), Math.abs(p.row - from.row));
+    for (let k = 1; k <= n; k++) {
+      applyGrid({ col: Math.round(from.col + ((p.col - from.col) * k) / n), row: Math.round(from.row + ((p.row - from.row) * k) / n) });
+    }
+    gridDrag.from = p;
   });
   grid.addEventListener('pointerup', () => { gridDrag = null; refreshControls(); });
   function applyGrid(p) {
@@ -602,10 +605,17 @@
     const key = p.col * 1000 + p.row;
     if (key === gridDrag.last) return;
     gridDrag.last = key;
-    const cur = pat.steps[p.col];
-    if (gridDrag.mode === 'erase') { if (cur && cur.s === p.row) pat.steps[p.col] = null; }
-    else pat.steps[p.col] = { s: p.row, v: cur ? cur.v : 1, p: 0, r: false, roll: 1 };
+    const step = pat.steps[p.col];
+    const at = step.findIndex((h) => h.s === p.row);
+    if (gridDrag.mode === 'erase') { if (at >= 0) step.splice(at, 1); }
+    else if (at < 0) addHit(step, p.row);
     pat.edited = true; dirty = true;
+  }
+  // Steps hold any number of hits (one per slice), kept in slice order.
+  function addHit(step, s) {
+    if (step.some((h) => h.s === s)) return;
+    step.push({ s, v: 1, p: 0, r: false, roll: 1 });
+    step.sort((a, b) => a.s - b.s);
   }
 
   // ---------- lanes ----------
@@ -624,27 +634,32 @@
     for (let i = 0; i < N; i++) {
       const x = GLEFT + i * cw;
       if (i % 4 === 0) { c.strokeStyle = i % 16 === 0 ? '#4d6e42' : '#2b4225'; c.beginPath(); c.moveTo(Math.round(x) + 0.5, 0); c.lineTo(Math.round(x) + 0.5, H); c.stroke(); }
-      const st = pat.steps[i];
-      if (!st || !S.slices[st.s]) continue;
-      c.fillStyle = LCOL[S.slices[st.s].label];
-      if (S.lane === 'vel') { const h = st.v * (H - 6); c.fillRect(x + 2, H - 3 - h, cw - 4, h); }
-      else if (S.lane === 'pitch') {
-        const h = (st.p / 12) * (H / 2 - 4);
-        c.fillRect(x + 2, h > 0 ? H / 2 - h : H / 2, cw - 4, Math.max(2, Math.abs(h)));
-      } else if (S.lane === 'roll') {
-        for (let k = 0; k < st.roll; k++) c.fillRect(x + 2, H - 6 - k * 14, cw - 4, 10);
-      } else if (S.lane === 'rev') {
-        c.globalAlpha = st.r ? 1 : 0.18; c.fillRect(x + 2, 8, cw - 4, H - 16); c.globalAlpha = 1;
-      }
+      const hits = pat.steps[i].filter((h) => S.slices[h.s]);
+      const sw = (cw - 3) / Math.max(1, hits.length);
+      hits.forEach((st, j) => {
+        const hx = x + 2 + j * sw, hw = Math.max(1, sw - 1);
+        c.fillStyle = LCOL[S.slices[st.s].label];
+        if (S.lane === 'vel') { const h = st.v * (H - 6); c.fillRect(hx, H - 3 - h, hw, h); }
+        else if (S.lane === 'pitch') {
+          const h = (st.p / 12) * (H / 2 - 4);
+          c.fillRect(hx, h > 0 ? H / 2 - h : H / 2, hw, Math.max(2, Math.abs(h)));
+        } else if (S.lane === 'roll') {
+          for (let k = 0; k < st.roll; k++) c.fillRect(hx, H - 6 - k * 14, hw, 10);
+        } else if (S.lane === 'rev') {
+          c.globalAlpha = st.r ? 1 : 0.18; c.fillRect(hx, 8, hw, H - 16); c.globalAlpha = 1;
+        }
+      });
     }
   }
   function laneApply(e) {
     const pat = curPat(); if (!pat) return;
     const r = lane.getBoundingClientRect(), W = r.width, H = r.height;
     const N = pat.steps.length, cw = (W - GLEFT) / N;
-    const col = Math.floor((e.clientX - r.left - GLEFT) / cw);
-    const st = pat.steps[col];
-    if (!st) return;
+    const fx = (e.clientX - r.left - GLEFT) / cw, col = Math.floor(fx);
+    const hits = (pat.steps[col] || []).filter((h) => S.slices[h.s]);
+    if (!hits.length) return;
+    // stacked hits split the step into sub-columns; pick the one under the pointer
+    const st = hits[Math.max(0, Math.min(hits.length - 1, Math.floor((fx - col) * hits.length)))];
     const fy = 1 - Math.max(0, Math.min(1, (e.clientY - r.top) / H));
     if (S.lane === 'vel') st.v = Math.max(0.05, Math.round(fy * 20) / 20);
     else if (S.lane === 'pitch') st.p = Math.round((fy - 0.5) * 2 * 12);
@@ -694,7 +709,7 @@
       const pos = E.position(), pat = S.patterns[pos.slot];
       if (pat) {
         const step = Math.round(pos.step) % pat.steps.length;
-        pat.steps[step] = { s: i, v: 1, p: 0, r: false, roll: 1 };
+        addHit(pat.steps[step], i);
         pat.edited = true; dirty = true;
       }
     }
@@ -743,7 +758,7 @@
   }
   function exportSlots() {
     if (!S.chain) return [S.editSlot];
-    const slots = [0, 1, 2, 3].filter((i) => S.patterns[i] && S.patterns[i].steps.some((x) => x));
+    const slots = [0, 1, 2, 3].filter((i) => S.patterns[i] && S.patterns[i].steps.some((x) => x.length));
     return slots.length ? slots : [S.editSlot];
   }
   function midiBytes() {
@@ -790,7 +805,7 @@
     $('#newSeedBtn').addEventListener('click', newTake);
     $('#clearBtn').addEventListener('click', () => {
       const p = curPat(); if (!p) return;
-      p.steps = p.steps.map((st, i) => (p.locks[i] ? st : null)); p.edited = true; dirty = true; refreshControls();
+      p.steps = p.steps.map((st, i) => (p.locks[i] ? st : [])); p.edited = true; dirty = true; refreshControls();
     });
     $$('#labelSeg button').forEach((b) => b.addEventListener('click', () => {
       const sl = S.slices[S.sel]; if (!sl) return;

@@ -1,6 +1,8 @@
 // Pattern generator built on drum & bass conventions.
-// A pattern is { steps: [step|null], locks: [bool], style, variant, edited }.
-// A step is { s: sliceIndex, v: velocity 0..1, p: semitones, r: reverse, roll: 1..4 }.
+// A pattern is { steps: [[hit, ...]], locks: [bool], style, variant, edited }.
+// Each step is an array of hits that sound together (empty = rest).
+// A hit is { s: sliceIndex, v: velocity 0..1, p: semitones, r: reverse, roll: 1..4 }.
+// The template builders below work on one hit per step; BT.generate wraps them into stacks.
 window.BT = window.BT || {};
 
 (function (BT) {
@@ -217,7 +219,7 @@ window.BT = window.BT || {};
   BT.generate = function (slices, srcSteps, opts) {
     const N = opts.bars * 16;
     const pat = { steps: [], locks: new Array(N).fill(false), style: opts.style, variant: opts.variant, edited: false };
-    if (!slices.length) { pat.steps = new Array(N).fill(null); return pat; }
+    if (!slices.length) { pat.steps = Array.from({ length: N }, () => []); return pat; }
     const kit = BT.analyzeKit(slices, srcSteps);
     const rng = BT.rng(BT.hash(opts.style + ':' + opts.variant + ':' + (opts.salt || 0)));
     let steps;
@@ -228,40 +230,50 @@ window.BT = window.BT || {};
     }
     applyChaos(steps, kit, slices, opts.style === 'jungle' ? Math.max(opts.chaos, 0.3) : opts.chaos, rng);
     if (opts.fill && N >= 8) applyFill(steps, kit, rng, opts.variant);
+    pat.steps = steps.map((st) => (st ? [st] : []));
     // keep locked steps from the previous pattern
     const prev = opts.prev;
     if (prev) {
       for (let i = 0; i < N && i < prev.steps.length; i++) {
-        if (prev.locks[i]) { steps[i] = prev.steps[i] && Object.assign({}, prev.steps[i]); pat.locks[i] = true; }
+        if (prev.locks[i]) { pat.steps[i] = BT.copyStep(prev.steps[i]); pat.locks[i] = true; }
       }
     }
-    pat.steps = steps;
     return pat;
   };
+
+  BT.copyStep = function (step) { return (step || []).map((h) => Object.assign({}, h)); };
 
   // Small random edits that keep the groove: swaps within type, ghosts, rolls, pitch, reverse.
   BT.mutate = function (pat, slices, srcSteps, chaos, seed) {
     const kit = BT.analyzeKit(slices, srcSteps);
     const rng = BT.rng(seed);
     const amt = 0.12 + chaos * 0.3;
-    pat.steps = pat.steps.map((st, i) => {
-      if (pat.locks[i] || !rng.chance(amt)) return st;
+    pat.steps = pat.steps.map((step, i) => {
+      if (pat.locks[i] || !rng.chance(amt)) return step;
       const anchorPos = i % 4 === 0;
-      if (!st) {
-        if (anchorPos) return st;
-        return rng.chance(0.5) ? mk(rng.pick(kit.ghosts), 0.4) : mk(rng.pick(kit.hats), 0.7);
+      if (!step.length) {
+        if (anchorPos) return step;
+        return [rng.chance(0.5) ? mk(rng.pick(kit.ghosts), 0.4) : mk(rng.pick(kit.hats), 0.7)];
       }
-      const n = Object.assign({}, st);
+      const out = BT.copyStep(step);
+      const j = rng.int(out.length), n = out[j];
       const lbl = slices[n.s] ? slices[n.s].label : 'H';
-      if (anchorPos && (lbl === 'K' || lbl === 'S') && rng.chance(0.75)) return st;
-      switch (rng.int(5)) {
+      if (anchorPos && (lbl === 'K' || lbl === 'S') && rng.chance(0.75)) return step;
+      switch (rng.int(6)) {
         case 0: { const pool = kit[lbl] && kit[lbl].length > 1 ? kit[lbl] : kit.hats; n.s = rng.pick(pool); break; }
         case 1: n.roll = n.roll > 1 ? 1 : rng.pick([2, 3, 4]); break;
         case 2: n.p = n.p ? 0 : rng.pick([-12, -7, -5, 5, 7, 12]); break;
         case 3: n.r = !n.r; break;
-        default: if (lbl !== 'K' && lbl !== 'S') return null; n.v = Math.max(0.3, n.v * 0.6);
+        case 4: {
+          // layer a hat or ghost under the hit
+          const layer = rng.pick(lbl === 'H' ? kit.ghosts : kit.hats);
+          if (!out.some((h) => h.s === layer)) out.push(mk(layer, 0.5));
+          break;
+        }
+        default: if (lbl !== 'K' && lbl !== 'S') out.splice(j, 1); else n.v = Math.max(0.3, n.v * 0.6);
       }
-      return n;
+      // a slice appears at most once per step
+      return out.filter((h, k) => out.findIndex((x) => x.s === h.s) === k);
     });
     pat.edited = true;
     return pat;
@@ -273,14 +285,16 @@ window.BT = window.BT || {};
     let base = 0;
     patterns.forEach((pat) => {
       const N = pat.steps.length;
-      pat.steps.forEach((st, i) => {
-        if (!st) return;
+      pat.steps.forEach((step, i) => {
+        if (!step.length) return;
         let next = 1;
-        while (next < N - i && !pat.steps[i + next]) next++;
-        const n = st.roll || 1;
-        for (let k = 0; k < n; k++) {
-          ev.push({ step: base + i + k / n, len: n > 1 ? 1 / n : Math.min(next, 4), note: 36 + st.s, vel: st.v });
-        }
+        while (next < N - i && !pat.steps[i + next].length) next++;
+        step.forEach((st) => {
+          const n = st.roll || 1;
+          for (let k = 0; k < n; k++) {
+            ev.push({ step: base + i + k / n, len: n > 1 ? 1 / n : Math.min(next, 4), note: 36 + st.s, vel: st.v });
+          }
+        });
       });
       base += N;
     });
