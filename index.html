@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Break Tool</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="titlebar">
+    <div class="brand"><span class="logo">BREAK TOOL</span><span class="by">dnb chop sequencer</span></div>
+    <div class="top-buttons">
+      <button id="playBtn" class="btn red wide" title="Space">PLAY</button>
+      <button id="recBtn" class="btn" title="Record pad hits into the pattern while playing">REC</button>
+      <button id="midiBtn" class="btn" draggable="true" title="Drag into your DAW, or click to download">DRAG MIDI</button>
+      <button id="wavBtn" class="btn" title="Render the pattern (or chain) to a WAV loop">EXPORT WAV</button>
+      <button id="kitBtn" class="btn" title="Download every slice as WAV + the pattern MIDI in a zip">EXPORT KIT</button>
+      <button id="resetBtn" class="btn">RESET CUTS</button>
+      <button id="lockBtn" class="btn" title="Lock the slice markers so slicing controls don't re-cut">LOCK</button>
+      <button id="loadBtn" class="btn">LOAD</button>
+      <input type="file" id="fileInput" accept="audio/*,.wav,.aif,.aiff,.mp3,.flac,.ogg" multiple hidden>
+    </div>
+  </header>
+
+  <!-- 1 BREAK -->
+  <section class="panel">
+    <div class="sec-head">
+      <span class="num">1</span><span class="sec-title">BREAK</span>
+      <span class="hint">Click: hear · Right-click label: type · Wheel: zoom · Drag box: move · Dbl-click top: add · Alt-click box: delete</span>
+      <div class="bpm">
+        <select id="breakSelect" title="Loaded breaks"></select>
+        <label>ORIGINAL</label><input id="origBpm" class="lcd" type="number" step="0.1" min="60" max="300">
+        <label>SONG</label><input id="songBpm" class="lcd" type="number" step="0.1" min="60" max="300">
+        <button id="repitchBtn" class="btn" title="On: slices pitch with tempo (classic sampler). Off: chops keep their pitch.">REPITCH</button>
+      </div>
+    </div>
+    <div class="wave-wrap" id="waveWrap">
+      <canvas id="wave"></canvas>
+      <div class="drop-hint" id="dropHint">Drop breaks here or press LOAD<br><small>WAV / AIFF / MP3 / FLAC: select several at once to build a list</small></div>
+    </div>
+    <div class="scrollbar" id="scrollbar"><div class="thumb" id="thumb"></div></div>
+
+    <div class="row">
+      <div class="group">
+        <div class="glabel">SLICING</div>
+        <div class="seg" data-key="sliceMode"><button data-v="even">EVEN</button><button data-v="auto">AUTO</button></div>
+      </div>
+      <div class="group">
+        <div class="glabel">EVEN SLICES</div>
+        <div class="seg" data-key="evenCount" data-num><button data-v="8">8</button><button data-v="16">16</button><button data-v="32">32</button><button data-v="64">64</button></div>
+      </div>
+      <div class="group">
+        <div class="glabel">BARS</div>
+        <div class="seg" data-key="bars" data-num><button data-v="1">1</button><button data-v="2">2</button><button data-v="4">4</button><button data-v="8">8</button><button data-v="0">ALL</button></div>
+      </div>
+      <div class="group">
+        <div class="glabel">PADS</div>
+        <div class="seg"><button class="toggle" data-key="choke">CHOKE</button></div>
+      </div>
+      <div class="spacer"></div>
+      <div class="knob" data-key="sensitivity" data-label="SENSITIVITY" data-min="0" data-max="1" data-def="0.5"></div>
+      <div class="knob" data-key="fade" data-label="FADE" data-min="0" data-max="1" data-def="0.15"></div>
+      <div class="knob" data-key="volume" data-label="VOLUME" data-min="0" data-max="1.5" data-def="0.8"></div>
+    </div>
+
+    <div class="row slice-row">
+      <div class="inspector">
+        <div class="glabel">SLICE <span id="selName" class="lcd-inline">--</span></div>
+        <div class="seg" id="labelSeg">
+          <button data-v="K" title="Kick">K</button><button data-v="S" title="Snare">S</button><button data-v="H" title="Hat / ride">H</button><button data-v="G" title="Ghost snare">G</button><button data-v="C" title="Crash / cymbal">C</button>
+        </div>
+        <div class="seg"><button class="toggle" data-key="slice.rev">REVERSE</button></div>
+      </div>
+      <div class="knob" data-key="slice.pitch" data-label="PITCH" data-min="-24" data-max="24" data-def="0" data-step="1" data-unit="st"></div>
+      <div class="knob" data-key="slice.gain" data-label="GAIN" data-min="0" data-max="2" data-def="1"></div>
+      <div class="knob" data-key="slice.pan" data-label="PAN" data-min="-1" data-max="1" data-def="0" data-fmt="pan"></div>
+      <div class="knob" data-key="slice.decay" data-label="LENGTH" data-min="0.05" data-max="1" data-def="1"></div>
+      <div class="spacer"></div>
+      <div class="pads-wrap">
+        <div class="glabel">PADS <span class="seg small" id="bankSeg"></span></div>
+        <div class="pads" id="pads"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 PATTERN -->
+  <section class="panel">
+    <div class="sec-head">
+      <span class="num">2</span><span class="sec-title">PATTERN</span>
+      <span class="hint">Click grid: place / clear · Drag: paint · Shift-click step number: lock step · Lanes edit per-step feel</span>
+      <div class="bpm">
+        <label>SLOT</label>
+        <div class="seg" id="slotSeg"><button data-v="0">A</button><button data-v="1">B</button><button data-v="2">C</button><button data-v="3">D</button></div>
+        <button id="copyBtn" class="btn" title="Copy this slot into the next slot">COPY →</button>
+        <button class="btn toggle" data-key="chain" title="Play A→B→C→D (non-empty slots)">CHAIN</button>
+      </div>
+    </div>
+    <div class="styles" id="styles"></div>
+    <div class="row">
+      <div class="group">
+        <div class="glabel">LENGTH</div>
+        <div class="seg" data-key="patLen" data-num><button data-v="1">1 BAR</button><button data-v="2">2</button><button data-v="4">4</button></div>
+      </div>
+      <div class="group">
+        <div class="glabel">GENERATE</div>
+        <div class="seg">
+          <button class="toggle" data-key="fill" title="Snare-roll fill on the last beat">FILL</button>
+          <button id="mutateBtn" title="Randomly vary the current pattern (M)">MUTATE</button>
+          <button id="newSeedBtn" title="Same style, new take (N)">NEW TAKE</button>
+          <button id="clearBtn">CLEAR</button>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="knob" data-key="density" data-label="DENSITY" data-min="0" data-max="1" data-def="0.5"></div>
+      <div class="knob" data-key="chaos" data-label="CHAOS" data-min="0" data-max="1" data-def="0.15"></div>
+      <div class="knob" data-key="swing" data-label="SWING" data-min="0" data-max="0.6" data-def="0"></div>
+      <div class="knob" data-key="human" data-label="HUMANIZE" data-min="0" data-max="1" data-def="0"></div>
+    </div>
+    <div class="grid-wrap">
+      <canvas id="grid"></canvas>
+    </div>
+    <div class="lane-head">
+      <div class="seg small" data-key="lane"><button data-v="vel">VELOCITY</button><button data-v="pitch">PITCH</button><button data-v="roll">ROLL</button><button data-v="rev">REVERSE</button></div>
+      <span class="hint" id="laneHint"></span>
+    </div>
+    <canvas id="lane"></canvas>
+  </section>
+
+  <!-- 3 SAMPLER / FX -->
+  <section class="panel split">
+    <div class="half">
+      <div class="sec-head"><span class="num">3</span><span class="sec-title">SAMPLER</span></div>
+      <div class="row">
+        <div class="group">
+          <div class="glabel">SAMPLE RATE</div>
+          <div class="seg" data-key="rate" data-num><button data-v="0">OFF</button><button data-v="32000">32k</button><button data-v="26040">26k</button><button data-v="22050">22k</button><button data-v="16000">16k</button><button data-v="11025">11k</button><button data-v="8000">8k</button></div>
+        </div>
+        <div class="group">
+          <div class="glabel">CHARACTER</div>
+          <div class="seg"><button class="toggle" data-key="bits12">12 BIT</button><button class="toggle" data-key="bits8">8 BIT</button><button class="toggle" data-key="mono">MONO</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="half">
+      <div class="sec-head"><span class="num">4</span><span class="sec-title">MIX FX</span></div>
+      <div class="row">
+        <div class="group">
+          <div class="glabel">FILTER</div>
+          <div class="seg" data-key="filterType"><button data-v="lowpass">LP</button><button data-v="highpass">HP</button><button data-v="bandpass">BP</button></div>
+        </div>
+        <div class="knob" data-key="cutoff" data-label="CUTOFF" data-min="0" data-max="1" data-def="1" data-fmt="hz"></div>
+        <div class="knob" data-key="res" data-label="RES" data-min="0" data-max="1" data-def="0.1"></div>
+        <div class="knob" data-key="drive" data-label="DRIVE" data-min="0" data-max="1" data-def="0"></div>
+        <div class="knob" data-key="comp" data-label="COMP" data-min="0" data-max="1" data-def="0"></div>
+        <div class="knob" data-key="room" data-label="ROOM" data-min="0" data-max="1" data-def="0"></div>
+        <canvas id="meter" width="16" height="64"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <footer class="keys">
+    <b>Space</b> play/stop · <b>1-4 Q-R A-F Z-V</b> pads · <b>M</b> mutate · <b>N</b> new take · <b>Del</b> delete selected marker · <b>←/→</b> select slice · MIDI notes start at C1 (36) = slice 1
+  </footer>
+</div>
+<div id="toast"></div>
+<script src="js/dsp.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/patterns.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

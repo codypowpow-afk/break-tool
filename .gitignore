@@ -1,0 +1,15 @@
+# build output
+dist/
+desktop/packages/
+
+# sample audio and reference images (third-party material, kept local)
+*.wav
+*.aif
+*.aiff
+*.mp3
+*.flac
+*.png
+!desktop/*.png
+
+# local tooling
+.claude/
