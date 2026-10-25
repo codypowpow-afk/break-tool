@@ -346,6 +346,91 @@ window.BT = window.BT || {};
       v('KKKKSKKKKKKKSKKK', 'tttTTTSSKKKKSSSS'),
       v('W.KKS.KKK.KKS.KK'),
     ],
+    // ---- more popular rhythms ----
+    disco: [ // four on the floor with open hats on the offbeat
+      v('K.o.X.o.K.o.X.o.'),
+      v('KhohXhohKhohXhoh'),
+      v('K.o.X.o.K.o.X.o.', 'K.o.X.o.K.o.XXXX'),
+      v('K.oKX.o.K.oKX.o.'),
+      v('Khh.Xhh.Khh.Xhh.'),
+      v('K.o.X.ogK.o.X.og'),
+      v('KhohXhohKhohXhoh', 'KhohXhohKhohXSSS'),
+      v('K.o.S.o.K.o.S.o.'),
+      v('Kqo.Xqo.Kqo.Xqo.'),
+      v('K.o.X.o.K.oKX.oK'),
+    ],
+    drill: [ // UK drill: halftime snare on 3, late snare in bar 2, sliding kicks, rolling hats
+      v('K..h.hK.S..h.h..', 'K..h.h..S..h.hS.'),
+      v('K.hqh.K.S.h.hqh.', 'K.hqh...S.hqh.S.'),
+      v('K..h..K.S..h..h.', '..Kh..h.S..hK.S.'),
+      v('K.h.h.K.S.h.h.K.', 'K.h.h...S.h.hQS.'),
+      v('K..K..h.S..h..h.', 'K..h..K.S..h.KS.'),
+      v('K.hhhhK.Shhhhhh.', 'K.hhhh..ShhhhhS.'),
+      v('K..h.hK.S..h.h..', 'K..h.hK.S..h.hSS'),
+      v('K..q..K.S..q..h.', 'K..q....S..Q..S.'),
+      v('K..h.hK.Sg.h.h.g', 'K..h.h..Sg.h.hS.'),
+      v('K..h.hKKS..h.h..', 'K.Kh.h..S..hKhS.'),
+    ],
+    amapiano: [ // log-drum toms, 16th shakers, claps on 2 & 4
+      v('KhhtShthKhhTShth'),
+      v('K..tS.t.K..TS.t.'),
+      v('KhhtShthKhhTShth', 'KhhtShthKhTTSTTh'),
+      v('K..t..t.K..T..t.', 'K..tS.t.K..TS.t.'),
+      v('KhhhShtTKhhhShtT'),
+      v('K..tS.tTK..tS.tT'),
+      v('KhhtShthKhhTShth', 'K..t..t.K..T..TT'),
+      v('K.ttS.t.K.TTS.t.'),
+      v('KhgtShthKhgTShth'),
+      v('K..tS.t.K..TS.t.', 'KtTtStTtKtTtSTTT'),
+    ],
+    dancehall: [ // riddims: steppers, rim clicks, Diwali 3-3-2 claps
+      v('K..KS...K..KS...'),
+      v('K..sS.s.K..sS.s.'),
+      v('K..KS..KK..KS...'),
+      v('Z..s..s.Z..s..s.'),
+      v('K..KS.h.K..KS.h.'),
+      v('K...S..KK...S..K'),
+      v('K..KS...K..KS...', 'K..KS...K.KKS.SS'),
+      v('K.hKShhKK.hKShh.'),
+      v('K..KS..gK..KS..g'),
+      v('Z..s..s.Z..s..s.', 'K..KS...K..KS...'),
+    ],
+    cumbia: [ // guiro long-short-short, kick 1 & 3, snare 2 & 4
+      v('K.hhS.hhK.hhS.hh'),
+      v('K.hhs.hhK.hhs.hh'),
+      v('K.hhS.hhK.hhS.hS'),
+      v('K.hsS.hsK.hsS.hs'),
+      v('K..hS..hK..hS..h'),
+      v('K.hhS.hhK.hhS.hh', 'K.hhS.hhK.hhSSSS'),
+      v('K.ohS.ohK.ohS.oh'),
+      v('K.hhSKhhK.hhSKhh'),
+      v('K.hgS.hgK.hgS.hg'),
+      v('KKhhS.hhKKhhS.hh'),
+    ],
+    bhangra: [ // dhol chaal: bass on the 1 and its "a", tilli rim in between
+      v('K..s.sK.K..s.sK.'),
+      v('K..s.sK.K..sSsK.'),
+      v('K..sSsK.K..sSsK.'),
+      v('K.ss.sK.K.ss.sK.'),
+      v('K..s.sK.K..s.sK.', 'K..s.sK.KKKsSsKK'),
+      v('K..t.tK.K..t.tK.'),
+      v('K..s.sKsK..s.sKs'),
+      v('Kh.shsK.Kh.shsK.'),
+      v('K..g.gK.S..g.gK.'),
+      v('K..s.sK.K..s.sK.', 'KssKssKsKssKSSSS'),
+    ],
+    punk: [ // skank beats, d-beat, crash-driven 8ths
+      v('Y.S.Y.S.Y.S.Y.S.'),
+      v('W.S...K.K.S.....', 'K.S...K.K.S.....'),
+      v('Y.Y.S.Y.Y.Y.S.Y.'),
+      v('W.S.K.S.K.S.K.S.', 'K.S.K.S.K.S.SSSS'),
+      v('KKS.KKS.KKS.KKS.'),
+      v('Y.h.S.h.Y.Y.S.h.'),
+      v('W.S.Y.S.Y.S.Y.S.', 'Y.S.Y.S.KKSSKKSS'),
+      v('K.S.K.S.KKS.K.S.'),
+      v('c.S.c.S.c.S.c.S.', 'K.S.K.S.K.S.K.S.'),
+      v('W.S...K.K.S...K.', 'W.S.K.KSKSKSSSSS'),
+    ],
   };
 
   // Fill templates: one bar each, applied to the last 4 / 8 / 16 steps before a phrase end.
@@ -393,6 +478,13 @@ window.BT = window.BT || {};
     { id: 'samba', name: 'SAMBA', sub: 'SURDO + CAIXA' },
     { id: 'motown', name: 'MOTOWN', sub: 'FOUR ON SNARE' },
     { id: 'metal', name: 'METAL', sub: 'DOUBLE KICK' },
+    { id: 'disco', name: 'DISCO', sub: 'OPEN HATS' },
+    { id: 'drill', name: 'UK DRILL', sub: 'SLIDE 808' },
+    { id: 'amapiano', name: 'AMAPIANO', sub: 'LOG DRUM' },
+    { id: 'dancehall', name: 'DANCEHALL', sub: 'RIDDIM' },
+    { id: 'cumbia', name: 'CUMBIA', sub: 'GUIRO' },
+    { id: 'bhangra', name: 'BHANGRA', sub: 'DHOL' },
+    { id: 'punk', name: 'PUNK', sub: 'D-BEAT' },
   ];
   BT.VARIANTS = 10;
 
@@ -611,10 +703,11 @@ window.BT = window.BT || {};
 
   // opts: { style, variant, bars, density, chaos, fill, fillType (0 = follow variant), fillLen (steps),
   //         fillEvery (bars, 0 = end only), salt, prev }
+  // Patterns are built on 16ths, then spread onto the BT.RES-per-16th (32nd-note) grid.
   BT.generate = function (slices, srcSteps, opts) {
-    const N = opts.bars * 16;
-    const pat = { steps: [], locks: new Array(N).fill(false), style: opts.style, variant: opts.variant, edited: false };
-    if (!slices.length) { pat.steps = Array.from({ length: N }, () => []); return pat; }
+    const N = opts.bars * 16, NR = N * BT.RES;
+    const pat = { steps: [], locks: new Array(NR).fill(false), style: opts.style, variant: opts.variant, edited: false };
+    if (!slices.length) { pat.steps = Array.from({ length: NR }, () => []); return pat; }
     const kit = BT.analyzeKit(slices, srcSteps);
     const rng = BT.rng(BT.hash(opts.style + ':' + opts.variant + ':' + (opts.salt || 0)));
     let steps;
@@ -631,11 +724,14 @@ window.BT = window.BT || {};
       if (every) for (let end = every; end < N; end += every) applyFill(steps, kit, type, len, end);
       applyFill(steps, kit, type, len, N);
     }
-    pat.steps = steps.map((st) => (Array.isArray(st) ? st : st ? [st] : []));
+    pat.steps = Array.from({ length: NR }, (_, i) => {
+      const st = i % BT.RES ? null : steps[i / BT.RES];
+      return Array.isArray(st) ? st : st ? [st] : [];
+    });
     // keep locked steps from the previous pattern
     const prev = opts.prev;
     if (prev) {
-      for (let i = 0; i < N && i < prev.steps.length; i++) {
+      for (let i = 0; i < NR && i < prev.steps.length; i++) {
         if (prev.locks[i]) { pat.steps[i] = BT.copyStep(prev.steps[i]); pat.locks[i] = true; }
       }
     }
@@ -651,9 +747,9 @@ window.BT = window.BT || {};
     const amt = 0.12 + chaos * 0.3;
     pat.steps = pat.steps.map((step, i) => {
       if (pat.locks[i] || !rng.chance(amt)) return step;
-      const anchorPos = i % 4 === 0;
+      const anchorPos = i % (4 * BT.RES) === 0;
       if (!step.length) {
-        if (anchorPos) return step;
+        if (anchorPos || i % BT.RES) return step;
         return [rng.chance(0.5) ? mk(rng.pick(kit.ghosts), 0.4) : mk(rng.pick(kit.hats), 0.7)];
       }
       const out = BT.copyStep(step);
@@ -680,7 +776,7 @@ window.BT = window.BT || {};
     return pat;
   };
 
-  // MIDI notes: C1 (36) + slice index.
+  // MIDI notes: C1 (36) + slice index. Event times are in 16ths.
   BT.patternToMidiEvents = function (patterns) {
     const ev = [];
     let base = 0;
@@ -693,11 +789,11 @@ window.BT = window.BT || {};
         step.forEach((st) => {
           const n = st.roll || 1;
           for (let k = 0; k < n; k++) {
-            ev.push({ step: base + i + k / n, len: n > 1 ? 1 / n : Math.min(next, 4), note: 36 + st.s, vel: st.v });
+            ev.push({ step: base + (i + (k * BT.RES) / n) / BT.RES, len: n > 1 ? 1 / n : Math.min(next / BT.RES, 4), note: 36 + st.s, vel: st.v });
           }
         });
       });
-      base += N;
+      base += N / BT.RES;
     });
     return { events: ev, total: base };
   };

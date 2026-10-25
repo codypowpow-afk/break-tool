@@ -135,17 +135,25 @@
       <div class="knob" data-key="swing" data-label="SWING" data-min="0" data-max="0.6" data-def="0"></div>
       <div class="knob" data-key="human" data-label="HUMANIZE" data-min="0" data-max="1" data-def="0"></div>
     </div>
-    <div class="pager" id="pager">
-      <button class="btn" id="pagePrev" title="Previous 4 bars">&#9664;</button>
-      <span class="lcd-inline" id="pageLabel"></span>
-      <button class="btn" id="pageNext" title="Next 4 bars">&#9654;</button>
-      <button class="btn" id="followBtn" title="Page along with the playhead">FOLLOW</button>
+    <div class="gridbar">
+      <span class="glabel">GRID</span>
+      <div class="seg small" data-key="gridRes" data-num><button data-v="4" title="Paint on 8th notes">1/8</button><button data-v="2" title="Paint on 16th notes">1/16</button><button data-v="1" title="Paint on 32nd notes">1/32</button></div>
+      <span class="glabel">BEAT REPEAT (HOLD)</span>
+      <div class="seg small">
+        <button data-rep="8" title="Hold to loop the current beat (key 5)">1/4</button><button data-rep="4" title="Hold to loop the current 8th (key 6)">1/8</button><button data-rep="2" title="Hold to loop the current 16th (key 7)">1/16</button><button data-rep="1" title="Hold to loop the current 32nd (key 8)">1/32</button>
+      </div>
+      <div class="pager" id="pager">
+        <button class="btn" id="pagePrev" title="Previous 4 bars">&#9664;</button>
+        <span class="lcd-inline" id="pageLabel"></span>
+        <button class="btn" id="pageNext" title="Next 4 bars">&#9654;</button>
+        <button class="btn" id="followBtn" title="Page along with the playhead">FOLLOW</button>
+      </div>
     </div>
     <div class="grid-wrap">
       <canvas id="grid"></canvas>
     </div>
     <div class="lane-head">
-      <div class="seg small" data-key="lane"><button data-v="vel">VELOCITY</button><button data-v="pitch">PITCH</button><button data-v="roll">ROLL</button><button data-v="rev">REVERSE</button></div>
+      <div class="seg small" data-key="lane"><button data-v="vel">VELOCITY</button><button data-v="chance">CHANCE</button><button data-v="pitch">PITCH</button><button data-v="roll">ROLL</button><button data-v="rev">REVERSE</button></div>
       <span class="hint" id="laneHint"></span>
     </div>
     <canvas id="lane"></canvas>
@@ -165,6 +173,19 @@
           <div class="seg"><button class="toggle" data-key="bits12">12 BIT</button><button class="toggle" data-key="bits8">8 BIT</button><button class="toggle" data-key="mono">MONO</button></div>
         </div>
       </div>
+      <div class="sec-head" style="margin-top:14px"><span class="num">5</span><span class="sec-title">SUB BASS</span><span class="hint">A sine sub that plays on every kick hit</span></div>
+      <div class="row">
+        <div class="group">
+          <div class="glabel">SUB</div>
+          <div class="seg small"><button class="toggle" data-key="sub">ON</button><button class="toggle" data-key="subGlide" title="Slide between overlapping notes">GLIDE</button></div>
+        </div>
+        <div class="group">
+          <div class="glabel">KEY</div>
+          <div class="seg small" data-key="subKey" data-num><button data-v="0">C</button><button data-v="1">C#</button><button data-v="2">D</button><button data-v="3">D#</button><button data-v="4">E</button><button data-v="5">F</button><button data-v="6">F#</button><button data-v="7">G</button><button data-v="8">G#</button><button data-v="9">A</button><button data-v="10">A#</button><button data-v="11">B</button></div>
+        </div>
+        <div class="knob" data-key="subLevel" data-label="LEVEL" data-min="0" data-max="1" data-def="0.7"></div>
+        <div class="knob" data-key="subDecay" data-label="DECAY" data-min="0.05" data-max="1" data-def="0.45"></div>
+      </div>
     </div>
     <div class="half">
       <div class="sec-head"><span class="num">4</span><span class="sec-title">MIX FX</span></div>
@@ -180,11 +201,26 @@
         <div class="knob" data-key="room" data-label="ROOM" data-min="0" data-max="1" data-def="0"></div>
         <canvas id="meter" width="16" height="64"></canvas>
       </div>
+      <div class="row">
+        <div class="group">
+          <div class="glabel">FILTER LFO</div>
+          <div class="seg small"><button class="toggle" data-key="lfoOn" title="Tempo-synced filter sweep">LFO</button></div>
+        </div>
+        <div class="group">
+          <div class="glabel">RATE</div>
+          <div class="seg small" data-key="lfoRate" data-num><button data-v="1">1/4</button><button data-v="2">1/2</button><button data-v="4">1 BAR</button><button data-v="8">2</button><button data-v="16">4</button></div>
+        </div>
+        <div class="group">
+          <div class="glabel">SHAPE</div>
+          <div class="seg small" data-key="lfoShape"><button data-v="sine">SINE</button><button data-v="triangle">TRI</button><button data-v="saw">SAW</button><button data-v="square">SQR</button></div>
+        </div>
+        <div class="knob" data-key="lfoDepth" data-label="DEPTH" data-min="0" data-max="1" data-def="0.5"></div>
+      </div>
     </div>
   </section>
 
   <footer class="keys">
-    <b>Space</b> play/stop · <b>Ctrl+Z</b> undo · <b>Ctrl+Y</b> redo · <b>1-4 Q-R A-F Z-V</b> pads · <b>M</b> mutate · <b>N</b> new take · <b>Del</b> delete selected marker · <b>←/→</b> select slice · MIDI notes start at C1 (36) = slice 1
+    <b>Space</b> play/stop · <b>5-8</b> hold beat repeat · <b>Ctrl+Z</b> undo · <b>Ctrl+Y</b> redo · <b>1-4 Q-R A-F Z-V</b> pads · <b>M</b> mutate · <b>N</b> new take · <b>Del</b> delete selected marker · <b>←/→</b> select slice · MIDI notes start at C1 (36) = slice 1
   </footer>
 </div>
 <div id="toast"></div>

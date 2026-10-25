@@ -97,6 +97,7 @@
         reslice(); break;
       case 'bars': applyBars(); break;
       case 'volume': case 'cutoff': case 'res': case 'drive': case 'comp': case 'room': case 'filterType':
+      case 'lfoOn': case 'lfoRate': case 'lfoShape': case 'lfoDepth':
         E.updateChain(); break;
       case 'rate': case 'bits12': case 'bits8': case 'mono':
         E.rebuildProcessed(); waveStaticDirty = true; break;
@@ -194,7 +195,7 @@
       $$('.vars button', el).forEach((b) => b.classList.toggle('on', !!active && +b.dataset.v === pat.variant));
     });
     $('#laneHint').textContent = {
-      vel: 'Drag to set hit velocity', pitch: 'Drag to pitch individual hits (±12 st)',
+      vel: 'Drag to set hit velocity', chance: 'Drag down to make hits play only some of the time', pitch: 'Drag to pitch individual hits (±12 st)',
       roll: 'Drag to ratchet a hit into 2/3/4 rolls', rev: 'Click to reverse individual hits',
     }[S.lane];
     refreshKnobs();
@@ -351,7 +352,7 @@
     const p = S.patterns[S.editSlot];
     if (!p) return;
     if (!p.edited) { regenerate(S.editSlot); return; }
-    const N = S.patLen * 16, old = p.steps.length;
+    const N = S.patLen * 16 * BT.RES, old = p.steps.length;
     const steps = [], locks = [];
     for (let i = 0; i < N; i++) {
       steps.push(BT.copyStep(p.steps[i % old]));
@@ -547,25 +548,29 @@
   })();
 
   // ---------- step grid ----------
+  // Patterns are stored on a 32nd-note grid. The view shows columns of S.gridRes steps
+  // (1 = 1/32, 2 = 1/16, 4 = 1/8); hits that fall between columns still show, drawn narrower.
   const grid = $('#grid'), gctx = grid.getContext('2d');
   const GHEAD = 16, GLEFT = 52;
+  const BEAT = 4 * BT.RES, BAR = 16 * BT.RES; // steps per beat / bar
   let playhead = null, gridDrag = null;
 
   // Long patterns are shown 4 bars (one page) at a time.
-  const PAGE = 64;
+  const PAGE = 4 * BAR;
   function gridView() {
     const pat = curPat();
-    const len = pat ? pat.steps.length : S.patLen * 16;
+    const len = pat ? pat.steps.length : S.patLen * BAR;
     const pages = Math.max(1, Math.ceil(len / PAGE));
     S.gridPage = Math.max(0, Math.min(pages - 1, S.gridPage || 0));
-    return { off: S.gridPage * PAGE, N: Math.min(PAGE, len), pages, len };
+    const res = S.gridRes, span = Math.min(PAGE, len);
+    return { off: S.gridPage * PAGE, span, res, N: span / res, pages, len };
   }
   function gridGeom() {
     const n = Math.max(1, S.slices.length);
     const rh = Math.max(6, Math.min(16, Math.floor(320 / n)));
     const W = grid.parentElement.clientWidth;
     const v = gridView();
-    return { n, rh, W, H: GHEAD + n * rh, N: v.N, off: v.off, cw: (W - GLEFT) / v.N };
+    return { n, rh, W, H: GHEAD + n * rh, N: v.N, off: v.off, res: v.res, span: v.span, cw: (W - GLEFT) / v.N };
   }
   function setPage(p) {
     const v = gridView();
@@ -577,8 +582,16 @@
     const v = gridView();
     $('#pager').style.display = v.pages > 1 ? '' : 'none';
     const a = S.gridPage * 4 + 1;
-    $('#pageLabel').textContent = 'BARS ' + a + '-' + Math.min(v.len / 16, a + 3) + ' / ' + v.len / 16;
+    $('#pageLabel').textContent = 'BARS ' + a + '-' + Math.min(v.len / BAR, a + 3) + ' / ' + v.len / BAR;
     $('#followBtn').classList.toggle('on', S.follow);
+  }
+  // hits of one column (steps [idx, idx + res)) with their step index
+  function colHits(pat, idx, res) {
+    const out = [];
+    for (let j = idx; j < idx + res && j < pat.steps.length; j++) {
+      pat.steps[j].forEach((h) => { if (S.slices[h.s]) out.push({ h, j }); });
+    }
+    return out;
   }
 
   function drawGrid() {
@@ -590,12 +603,13 @@
     c.setTransform(dpr(), 0, 0, dpr(), 0, 0);
     c.fillStyle = '#142012'; c.fillRect(0, 0, g.W, g.H);
     const pat = curPat();
+    const locked = (a) => pat && pat.locks.slice(a, a + g.res).some((x) => x);
     // beat shading
     for (let i = 0; i < g.N; i++) {
-      const x = GLEFT + i * g.cw;
-      c.fillStyle = Math.floor(i / 4) % 2 === 0 ? '#182a15' : '#142012';
+      const x = GLEFT + i * g.cw, a = g.off + i * g.res;
+      c.fillStyle = Math.floor(a / BEAT) % 2 === 0 ? '#182a15' : '#142012';
       c.fillRect(x, GHEAD, g.cw, g.H - GHEAD);
-      if (pat && pat.locks[g.off + i]) { c.fillStyle = 'rgba(255,209,102,.10)'; c.fillRect(x, GHEAD, g.cw, g.H - GHEAD); }
+      if (locked(a)) { c.fillStyle = 'rgba(255,209,102,.10)'; c.fillRect(x, GHEAD, g.cw, g.H - GHEAD); }
     }
     // rows
     c.font = 'bold ' + Math.min(10, g.rh - 1) + 'px Consolas';
@@ -608,65 +622,78 @@
       if (g.rh >= 8) { c.fillStyle = r === S.sel ? '#b8e35a' : '#8aa57f'; c.fillText(String(r + 1).padStart(2, '0') + ' ' + sl.label, 7, y + g.rh - 2); }
       c.strokeStyle = '#0f180d'; c.beginPath(); c.moveTo(GLEFT, y + 0.5); c.lineTo(g.W, y + 0.5); c.stroke();
     });
-    // bar / beat lines
+    // bar / beat / 16th lines
     for (let i = 0; i <= g.N; i++) {
-      if (i % 4) continue;
+      const a = g.off + i * g.res;
+      if (a % BEAT && !(g.res === 1 && a % BT.RES === 0 && g.cw > 5)) continue;
       const x = Math.round(GLEFT + i * g.cw) + 0.5;
-      c.strokeStyle = i % 16 === 0 ? '#4d6e42' : '#2b4225';
-      c.beginPath(); c.moveTo(x, 0); c.lineTo(x, g.H); c.stroke();
+      c.strokeStyle = a % BAR === 0 ? '#4d6e42' : a % BEAT === 0 ? '#2b4225' : '#1b2b18';
+      c.beginPath(); c.moveTo(x, a % BEAT ? GHEAD : 0); c.lineTo(x, g.H); c.stroke();
     }
     // header
     c.fillStyle = '#0d150b'; c.fillRect(GLEFT, 0, g.W - GLEFT, GHEAD);
     c.font = 'bold 9px Consolas';
     for (let i = 0; i < g.N; i++) {
-      const x = GLEFT + i * g.cw, a = g.off + i;
-      const locked = pat && pat.locks[a];
-      if (locked) { c.fillStyle = '#ffd166'; c.fillRect(x + 1, 2, g.cw - 2, GHEAD - 4); }
-      if (g.cw > 13 || a % 4 === 0) {
+      const x = GLEFT + i * g.cw, a = g.off + i * g.res;
+      const lk = locked(a);
+      if (lk) { c.fillStyle = '#ffd166'; c.fillRect(x + 1, 2, g.cw - 2, GHEAD - 4); }
+      if (g.cw > 13 || a % BEAT === 0) {
         // bar number on the downbeat, beat number (2-4) on other beats
-        c.fillStyle = locked ? '#111' : a % 16 === 0 ? '#b8e35a' : a % 4 === 0 ? '#6f8f63' : '#4f6b46';
-        c.fillText(a % 16 === 0 ? String(a / 16 + 1) : a % 4 === 0 ? '.' + ((a % 16) / 4 + 1) : '·', x + 3, GHEAD - 4);
+        c.fillStyle = lk ? '#111' : a % BAR === 0 ? '#b8e35a' : a % BEAT === 0 ? '#6f8f63' : '#4f6b46';
+        c.fillText(a % BAR === 0 ? String(a / BAR + 1) : a % BEAT === 0 ? '.' + ((a % BAR) / BEAT + 1) : '·', x + 3, GHEAD - 4);
       }
     }
-    c.fillStyle = '#8aa57f'; c.fillText(['A', 'B', 'C', 'D'][S.editSlot] + ' ' + (pat ? pat.steps.length / 16 : 0) + 'BAR', 4, GHEAD - 4);
+    c.fillStyle = '#8aa57f'; c.fillText(['A', 'B', 'C', 'D'][S.editSlot] + ' ' + (pat ? pat.steps.length / BAR : 0) + 'BAR', 4, GHEAD - 4);
     // playhead
-    if (playhead && S.playing && playhead.slot === S.editSlot && playhead.step >= g.off && playhead.step < g.off + g.N) {
+    if (playhead && S.playing && playhead.slot === S.editSlot && playhead.step >= g.off && playhead.step < g.off + g.span) {
       c.fillStyle = 'rgba(210,60,44,.35)';
-      c.fillRect(GLEFT + (playhead.step - g.off) * g.cw, 0, g.cw, g.H);
+      c.fillRect(GLEFT + ((playhead.step - g.off) / g.res) * g.cw, 0, g.cw / g.res, g.H);
     }
-    // cells
+    // cells: on-column hits fill the column, in-between hits draw at their own position
     if (!pat) return;
-    pat.steps.slice(g.off, g.off + g.N).forEach((step, i) => step.forEach((st) => {
+    pat.steps.slice(g.off, g.off + g.span).forEach((step, rel) => step.forEach((st) => {
       if (!S.slices[st.s]) return;
-      const x = GLEFT + i * g.cw + 1, y = GHEAD + st.s * g.rh + 1, w = g.cw - 2, h = g.rh - 2;
-      c.globalAlpha = 0.35 + 0.65 * st.v;
+      const sub = rel % g.res, sw = g.cw / g.res;
+      const x = GLEFT + (rel / g.res) * g.cw + 1, y = GHEAD + st.s * g.rh + 1;
+      const w = (sub ? sw : g.cw) - 2, h = g.rh - 2;
+      c.globalAlpha = (0.35 + 0.65 * st.v) * (st.c != null && st.c < 1 ? 0.45 + 0.55 * st.c : 1);
       c.fillStyle = LCOL[S.slices[st.s].label];
       c.fillRect(x, y, w, h);
       c.globalAlpha = 1;
+      if (sub) { c.strokeStyle = '#eaffd0'; c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1); }
+      if (st.c != null && st.c < 1 && w > 6) { c.fillStyle = '#111'; c.fillRect(x + 1, y + h - 2, (w - 2) * st.c, 2); }
       if (st.roll > 1) {
         c.fillStyle = '#111';
         for (let k = 1; k < st.roll; k++) c.fillRect(x + (w * k) / st.roll, y, 1, h);
       }
       if (st.r) { c.fillStyle = '#111'; c.beginPath(); c.moveTo(x + 2, y + h / 2); c.lineTo(x + Math.min(8, w - 2), y + 1); c.lineTo(x + Math.min(8, w - 2), y + h - 1); c.fill(); }
-      if (st.p && g.rh >= 10) { c.fillStyle = '#111'; c.font = 'bold 8px Consolas'; c.fillText((st.p > 0 ? '+' : '') + st.p, x + w - 14, y + h - 1); }
+      if (st.p && g.rh >= 10 && w > 14) { c.fillStyle = '#111'; c.font = 'bold 8px Consolas'; c.fillText((st.p > 0 ? '+' : '') + st.p, x + w - 14, y + h - 1); }
     }));
   }
 
+  // c: visible column; idx: first step of that column
   function gridCell(e) {
     const r = grid.getBoundingClientRect(), g = gridGeom();
     const x = e.clientX - r.left, y = e.clientY - r.top;
-    return { col: g.off + Math.floor((x - GLEFT) / g.cw), row: Math.floor((y - GHEAD) / g.rh), head: y < GHEAD, left: x < GLEFT, g };
+    const col = Math.floor((x - GLEFT) / g.cw);
+    return { c: col, idx: g.off + col * g.res, row: Math.floor((y - GHEAD) / g.rh), head: y < GHEAD, left: x < GLEFT, g };
   }
   grid.addEventListener('pointerdown', (e) => {
     const pat = curPat();
     if (!pat || !S.slices.length) return;
     const p = gridCell(e);
     if (p.left) { if (p.row >= 0 && p.row < S.slices.length) selectSlice(p.row, true); return; }
-    if (p.col < p.g.off || p.col >= p.g.off + p.g.N) return;
-    if (p.head) { checkpoint(); pat.locks[p.col] = !pat.locks[p.col]; dirty = true; return; }
+    if (p.c < 0 || p.c >= p.g.N) return;
+    if (p.head) {
+      checkpoint();
+      const on = !pat.locks.slice(p.idx, p.idx + p.g.res).some((x) => x);
+      for (let j = p.idx; j < p.idx + p.g.res; j++) pat.locks[j] = on;
+      dirty = true; return;
+    }
     if (p.row < 0 || p.row >= S.slices.length) return;
     checkpoint();
-    gridDrag = { mode: pat.steps[p.col].some((h) => h.s === p.row) ? 'erase' : 'paint', last: -1 };
+    const has = colHits(pat, p.idx, p.g.res).some((o) => o.h.s === p.row);
+    gridDrag = { mode: has ? 'erase' : 'paint', last: -1 };
     grid.setPointerCapture(e.pointerId);
     applyGrid(p);
     gridDrag.from = p;
@@ -676,24 +703,26 @@
     if (!gridDrag) return;
     // fill every cell between pointer events so fast drags don't skip rows/steps
     const p = gridCell(e), from = gridDrag.from || p;
-    const n = Math.max(Math.abs(p.col - from.col), Math.abs(p.row - from.row));
+    const n = Math.max(Math.abs(p.c - from.c), Math.abs(p.row - from.row));
     for (let k = 1; k <= n; k++) {
-      applyGrid({ col: Math.round(from.col + ((p.col - from.col) * k) / n), row: Math.round(from.row + ((p.row - from.row) * k) / n) });
+      const c = Math.round(from.c + ((p.c - from.c) * k) / n);
+      applyGrid({ c, idx: p.g.off + c * p.g.res, row: Math.round(from.row + ((p.row - from.row) * k) / n), g: p.g });
     }
     gridDrag.from = p;
   });
   grid.addEventListener('pointerup', () => { gridDrag = null; refreshControls(); });
   function applyGrid(p) {
     const pat = curPat();
-    const v = gridView();
-    if (p.col < v.off || p.col >= Math.min(pat.steps.length, v.off + v.N) || p.row < 0 || p.row >= S.slices.length) return;
-    const key = p.col * 1000 + p.row;
+    if (p.c < 0 || p.c >= p.g.N || p.idx >= pat.steps.length || p.row < 0 || p.row >= S.slices.length) return;
+    const key = p.idx * 1000 + p.row;
     if (key === gridDrag.last) return;
     gridDrag.last = key;
-    const step = pat.steps[p.col];
-    const at = step.findIndex((h) => h.s === p.row);
-    if (gridDrag.mode === 'erase') { if (at >= 0) step.splice(at, 1); }
-    else if (at < 0) addHit(step, p.row);
+    if (gridDrag.mode === 'erase') {
+      for (let j = p.idx; j < p.idx + p.g.res; j++) {
+        const at = pat.steps[j].findIndex((h) => h.s === p.row);
+        if (at >= 0) pat.steps[j].splice(at, 1);
+      }
+    } else if (!colHits(pat, p.idx, p.g.res).some((o) => o.h.s === p.row)) addHit(pat.steps[p.idx], p.row);
     pat.edited = true; dirty = true;
   }
   // Steps hold any number of hits (one per slice), kept in slice order.
@@ -717,14 +746,15 @@
     c.fillText(S.lane.toUpperCase(), 6, 14);
     if (S.lane === 'pitch') { c.strokeStyle = '#2b4225'; c.beginPath(); c.moveTo(GLEFT, H / 2 + 0.5); c.lineTo(W, H / 2 + 0.5); c.stroke(); }
     for (let i = 0; i < N; i++) {
-      const x = GLEFT + i * cw;
-      if (i % 4 === 0) { c.strokeStyle = i % 16 === 0 ? '#4d6e42' : '#2b4225'; c.beginPath(); c.moveTo(Math.round(x) + 0.5, 0); c.lineTo(Math.round(x) + 0.5, H); c.stroke(); }
-      const hits = pat.steps[v.off + i].filter((h) => S.slices[h.s]);
+      const x = GLEFT + i * cw, a = v.off + i * v.res;
+      if (a % BEAT === 0) { c.strokeStyle = a % BAR === 0 ? '#4d6e42' : '#2b4225'; c.beginPath(); c.moveTo(Math.round(x) + 0.5, 0); c.lineTo(Math.round(x) + 0.5, H); c.stroke(); }
+      const hits = colHits(pat, a, v.res).map((o) => o.h);
       const sw = (cw - 3) / Math.max(1, hits.length);
       hits.forEach((st, j) => {
         const hx = x + 2 + j * sw, hw = Math.max(1, sw - 1);
         c.fillStyle = LCOL[S.slices[st.s].label];
         if (S.lane === 'vel') { const h = st.v * (H - 6); c.fillRect(hx, H - 3 - h, hw, h); }
+        else if (S.lane === 'chance') { const h = (st.c == null ? 1 : st.c) * (H - 6); c.fillRect(hx, H - 3 - h, hw, h); }
         else if (S.lane === 'pitch') {
           const h = (st.p / 12) * (H / 2 - 4);
           c.fillRect(hx, h > 0 ? H / 2 - h : H / 2, hw, Math.max(2, Math.abs(h)));
@@ -742,12 +772,13 @@
     const v = gridView(), cw = (W - GLEFT) / v.N;
     const fx = (e.clientX - r.left - GLEFT) / cw, col = Math.floor(fx);
     if (col < 0 || col >= v.N) return;
-    const hits = (pat.steps[v.off + col] || []).filter((h) => S.slices[h.s]);
+    const hits = colHits(pat, v.off + col * v.res, v.res).map((o) => o.h);
     if (!hits.length) return;
-    // stacked hits split the step into sub-columns; pick the one under the pointer
+    // stacked hits split the column into sub-columns; pick the one under the pointer
     const st = hits[Math.max(0, Math.min(hits.length - 1, Math.floor((fx - col) * hits.length)))];
     const fy = 1 - Math.max(0, Math.min(1, (e.clientY - r.top) / H));
     if (S.lane === 'vel') st.v = Math.max(0.05, Math.round(fy * 20) / 20);
+    else if (S.lane === 'chance') { const c = Math.max(0.05, Math.round(fy * 20) / 20); if (c >= 1) delete st.c; else st.c = c; }
     else if (S.lane === 'pitch') st.p = Math.round((fy - 0.5) * 2 * 12);
     else if (S.lane === 'roll') st.roll = Math.max(1, Math.min(4, 1 + Math.floor(fy * 4)));
     else if (S.lane === 'rev') {
@@ -794,7 +825,8 @@
     if (S.recording && S.playing) {
       const pos = E.position(), pat = S.patterns[pos.slot];
       if (pat) {
-        const step = Math.round(pos.step) % pat.steps.length;
+        // quantise to the grid resolution being shown
+        const step = (Math.round(pos.step / S.gridRes) * S.gridRes) % pat.steps.length;
         checkpoint('rec');
         addHit(pat.steps[step], i);
         pat.edited = true; dirty = true;
@@ -872,14 +904,14 @@
     });
     $('#songBpm').addEventListener('change', (e) => {
       const v = parseFloat(e.target.value);
-      if (v > 40 && v < 400) S.songBpm = v;
+      if (v > 40 && v < 400) { S.songBpm = v; E.updateChain(); }
       refreshControls();
     });
     $$('#slotSeg button').forEach((b) => b.addEventListener('click', () => {
       S.editSlot = +b.dataset.v;
       const p = curPat();
       if (!p) regenerate(S.editSlot);
-      else { S.style = p.style; S.variant = p.variant; S.patLen = p.steps.length / 16; }
+      else { S.style = p.style; S.variant = p.variant; S.patLen = p.steps.length / BAR; }
       refreshControls(); dirty = true;
     }));
     $('#copyBtn').addEventListener('click', () => {
@@ -892,6 +924,13 @@
     });
     $('#mutateBtn').addEventListener('click', mutate);
     $('#undoBtn').addEventListener('click', undo);
+    $$('[data-rep]').forEach((b) => {
+      const on = () => { E.setRepeat(+b.dataset.rep); b.classList.add('on'); };
+      const off = () => { E.setRepeat(0); b.classList.remove('on'); };
+      b.addEventListener('pointerdown', on);
+      b.addEventListener('pointerup', off);
+      b.addEventListener('pointerleave', off);
+    });
     $('#pagePrev').addEventListener('click', () => setPage(S.gridPage - 1));
     $('#pageNext').addEventListener('click', () => setPage(S.gridPage + 1));
     $('#followBtn').addEventListener('click', () => { S.follow = !S.follow; renderPager(); });
@@ -962,6 +1001,7 @@
     const k = e.key.toLowerCase();
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); return; }
     if (e.repeat) return;
+    if (REPEAT_KEYS[k]) { E.setRepeat(REPEAT_KEYS[k]); $('[data-rep="' + REPEAT_KEYS[k] + '"]').classList.add('on'); return; }
     const pi = PAD_KEYS.indexOf(k);
     if (pi >= 0) { triggerPad(pi); return; }
     if (k === 'm') mutate();
@@ -969,6 +1009,15 @@
     else if (k === 'delete' || k === 'backspace') { if (!S.locked) deleteMarker(S.sel); }
     else if (k === 'arrowleft') selectSlice(Math.max(0, S.sel - 1), true);
     else if (k === 'arrowright') selectSlice(Math.min(S.slices.length - 1, S.sel + 1), true);
+  });
+
+  // keys 5-8 hold beat repeat at 1/4, 1/8, 1/16, 1/32 (in 32nd steps)
+  const REPEAT_KEYS = { 5: 4 * BT.RES * 1, 6: 2 * BT.RES, 7: BT.RES, 8: 1 };
+  document.addEventListener('keyup', (e) => {
+    const len = REPEAT_KEYS[e.key];
+    if (!len) return;
+    E.setRepeat(0);
+    $('[data-rep="' + len + '"]').classList.remove('on');
   });
 
   // ---------- drag & drop ----------

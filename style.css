@@ -98,7 +98,9 @@ select { background: var(--btn); border: 1px solid var(--btn-edge); border-radiu
 .style .vars { display: grid; grid-template-columns: repeat(5, 22px); gap: 3px; justify-content: center; }
 .style .vars button { padding: 2px 0; width: 22px; font-size: 10px; }
 
-.pager { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.gridbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.pager { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+[data-rep].on { background: var(--red); color: #fff; }
 .pager .btn { padding: 3px 9px; }
 .grid-wrap { margin-top: 10px; background: var(--screen); border: 3px solid #4d4636; border-radius: 4px; overflow: hidden; }
 #grid { width: 100%; display: block; cursor: pointer; }
