@@ -20,7 +20,7 @@
   function get(key) {
     if (key.startsWith('slice.')) {
       const sl = S.slices[S.sel];
-      return sl ? sl[key.slice(6)] : { pitch: 0, gain: 1, pan: 0, decay: 1, rev: false }[key.slice(6)];
+      return sl ? sl[key.slice(6)] : { pitch: 0, gain: 1, pan: 0, decay: 1, rev: false, sc: false }[key.slice(6)];
     }
     if (key === 'bits12') return S.bits === 12;
     if (key === 'bits8') return S.bits === 8;
@@ -97,7 +97,7 @@
         reslice(); break;
       case 'bars': applyBars(); break;
       case 'volume': case 'cutoff': case 'res': case 'drive': case 'comp': case 'room': case 'filterType':
-      case 'lfoOn': case 'lfoRate': case 'lfoShape': case 'lfoDepth':
+      case 'lfoOn': case 'lfoRate': case 'lfoShape': case 'lfoDepth': case 'filterOn':
         E.updateChain(); break;
       case 'rate': case 'bits12': case 'bits8': case 'mono':
         E.rebuildProcessed(); waveStaticDirty = true; break;
@@ -248,6 +248,7 @@
     const b = S.breaks[i];
     if (!b) return;
     if (S.playing) E.stop();
+    E.resetDefaults(); // every import starts clean: 120 BPM, no FX, no crunch, fresh patterns
     S.current = i; S.src = b.buffer; S.name = b.name;
     $('#breakSelect').value = i;
     $('#dropHint').style.display = 'none';
@@ -277,7 +278,7 @@
   }
 
   function makeSlice(pos, info) {
-    return { pos, label: info.label, rms: info.rms, pitch: 0, gain: 1, pan: 0, decay: 1, rev: false, origStep: 0 };
+    return { pos, label: info.label, rms: info.rms, pitch: 0, gain: 1, pan: 0, decay: 1, rev: false, sc: false, origStep: 0 };
   }
 
   function reslice() {
@@ -619,7 +620,7 @@
       c.fillRect(0, y, GLEFT - 2, g.rh);
       c.fillStyle = LCOL[sl.label];
       c.fillRect(0, y, 3, g.rh);
-      if (g.rh >= 8) { c.fillStyle = r === S.sel ? '#b8e35a' : '#8aa57f'; c.fillText(String(r + 1).padStart(2, '0') + ' ' + sl.label, 7, y + g.rh - 2); }
+      if (g.rh >= 8) { c.fillStyle = r === S.sel ? '#b8e35a' : '#8aa57f'; c.fillText(String(r + 1).padStart(2, '0') + ' ' + sl.label + (sl.sc ? ' sc' : ''), 7, y + g.rh - 2); }
       c.strokeStyle = '#0f180d'; c.beginPath(); c.moveTo(GLEFT, y + 0.5); c.lineTo(g.W, y + 0.5); c.stroke();
     });
     // bar / beat / 16th lines
@@ -814,7 +815,7 @@
       d.classList.toggle('empty', !sl);
       d.classList.toggle('sel', i === S.sel);
       d.style.setProperty('--pc', sl ? LCOL[sl.label] : '#444');
-      d.innerHTML = sl ? '<span>' + (i + 1) + ' ' + sl.label + '</span><small>' + PAD_KEYS[k].toUpperCase() + '</small>' : '';
+      d.innerHTML = sl ? '<span>' + (i + 1) + ' ' + sl.label + '</span><small>' + PAD_KEYS[k].toUpperCase() + (sl.sc ? ' &middot; SC' : '') + '</small>' : '';
     });
   }
   function flashPad(i) { padHits[i] = performance.now(); }
@@ -924,6 +925,14 @@
     });
     $('#mutateBtn').addEventListener('click', mutate);
     $('#undoBtn').addEventListener('click', undo);
+    $$('[data-sc]').forEach((b) => b.addEventListener('click', () => {
+      if (!S.slices.length) return;
+      checkpoint();
+      const lbl = b.dataset.sc;
+      S.slices.forEach((sl) => { sl.sc = lbl === 'none' ? false : lbl === sl.label ? true : sl.sc; });
+      if (lbl !== 'none') S.sub = true;
+      refreshControls(); dirty = true;
+    }));
     $$('[data-rep]').forEach((b) => {
       const on = () => { E.setRepeat(+b.dataset.rep); b.classList.add('on'); };
       const off = () => { E.setRepeat(0); b.classList.remove('on'); };

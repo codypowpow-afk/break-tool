@@ -11,12 +11,12 @@ window.BT = window.BT || {};
     // source
     breaks: [], current: -1, name: '',
     src: null, proc: null, procRev: null,
-    origBpm: 172, songBpm: 172, bars: 0, repitch: false,
+    origBpm: 172, songBpm: 120, bars: 0, repitch: false,
     // slicing
     sliceMode: 'auto', evenCount: 16, sensitivity: 0.5, locked: false, manual: false,
     slices: [], sel: 0,
     // playback
-    choke: true, fade: 0.15, volume: 0.8, swing: 0, human: 0,
+    choke: true, fade: 0.06, volume: 0.8, swing: 0, human: 0,
     // pattern
     style: 'twostep', variant: 1, density: 0.5, chaos: 0, fill: false, seedSalt: 0,
     fillType: 0, fillLen: 4, fillEvery: 8,
@@ -26,15 +26,31 @@ window.BT = window.BT || {};
     // sampler
     rate: 0, bits: 16, mono: false,
     // fx
-    filterType: 'lowpass', cutoff: 1, res: 0.1, drive: 0, comp: 0, room: 0,
+    filterOn: false, filterType: 'lowpass', cutoff: 1, res: 0.1, drive: 0, comp: 0, room: 0,
     lfoOn: false, lfoRate: 4, lfoShape: 'sine', lfoDepth: 0.5,
     // sub bass that follows the kicks
     sub: false, subKey: 5, subLevel: 0.7, subDecay: 0.45, subGlide: true,
+    scDepth: 0.8, scRelease: 0.25, // sidechain: how far / how slowly the sub ducks under trigger chops
     // transport
     playing: false, recording: false,
   });
 
+  // Everything a freshly loaded break resets to, so imports always start clean.
+  // (Volume, the break list and view settings like FOLLOW are left alone.)
+  const RESET_KEYS = ['songBpm', 'repitch', 'bars', 'sliceMode', 'evenCount', 'sensitivity', 'choke', 'fade', 'swing', 'human',
+    'style', 'variant', 'density', 'chaos', 'fill', 'seedSalt', 'fillType', 'fillLen', 'fillEvery', 'patLen', 'gridRes', 'lane',
+    'rate', 'bits', 'mono', 'filterOn', 'filterType', 'cutoff', 'res', 'drive', 'comp', 'room',
+    'lfoOn', 'lfoRate', 'lfoShape', 'lfoDepth', 'sub', 'subKey', 'subLevel', 'subDecay', 'subGlide', 'scDepth', 'scRelease'];
+  const DEFAULTS = JSON.parse(JSON.stringify(RESET_KEYS.reduce((o, k) => { o[k] = S[k]; return o; }, {})));
+
   const E = (BT.engine = {});
+
+  E.resetDefaults = function () {
+    Object.assign(S, JSON.parse(JSON.stringify(DEFAULTS)));
+    S.patterns = [null, null, null, null];
+    S.editSlot = 0; S.playSlot = 0; S.gridPage = 0; S.locked = false;
+    E.updateChain();
+  };
 
   E.init = function () {
     if (E.ctx) return;
@@ -57,8 +73,8 @@ window.BT = window.BT || {};
     return b;
   }
 
-  // input -> drive -> filter (+LFO) -> comp -> makeup -> (dry + room) -> master -> limiter -> [analyser] -> out
-  // The sub bass enters after the filter so sweeps never thin out the low end.
+  // input -> drive -> [filter (+LFO) | bypass] -> comp -> makeup -> (dry + room) -> master -> limiter -> [analyser] -> out
+  // The sub bass enters after the filter (through the sidechain ducker) so sweeps never thin out the low end.
   E.buildChain = function (ctx, out, withAnalyser) {
     const c = {};
     c.input = ctx.createGain();
@@ -66,7 +82,9 @@ window.BT = window.BT || {};
     c.filter = ctx.createBiquadFilter();
     c.lfoAmt = ctx.createGain(); c.lfoAmt.gain.value = 0;
     c.lfoAmt.connect(c.filter.detune);
+    c.filterWet = ctx.createGain(); c.filterDry = ctx.createGain();
     c.subIn = ctx.createGain();
+    c.subDuck = ctx.createGain();
     c.comp = ctx.createDynamicsCompressor();
     c.makeup = ctx.createGain();
     c.dry = ctx.createGain();
@@ -77,8 +95,10 @@ window.BT = window.BT || {};
     c.limiter = ctx.createDynamicsCompressor();
     c.limiter.threshold.value = -1.5; c.limiter.knee.value = 0; c.limiter.ratio.value = 20;
     c.limiter.attack.value = 0.001; c.limiter.release.value = 0.08;
-    c.input.connect(c.shaper); c.shaper.connect(c.filter); c.filter.connect(c.comp);
-    c.subIn.connect(c.comp);
+    c.input.connect(c.shaper);
+    c.shaper.connect(c.filter); c.filter.connect(c.filterWet); c.filterWet.connect(c.comp);
+    c.shaper.connect(c.filterDry); c.filterDry.connect(c.comp);
+    c.subIn.connect(c.subDuck); c.subDuck.connect(c.comp);
     c.comp.connect(c.makeup); c.makeup.connect(c.dry); c.makeup.connect(c.verb);
     c.verb.connect(c.wet); c.dry.connect(c.master); c.wet.connect(c.master);
     c.master.connect(c.limiter);
@@ -105,7 +125,7 @@ window.BT = window.BT || {};
     c.lfo.frequency.value = S.songBpm / 60 / S.lfoRate;
     // detune swings +/- depth*2 octaves around a centre 2*depth octaves below the cutoff,
     // so the sweep runs between the cutoff and 4*depth octaves under it
-    c.lfoAmt.gain.value = S.lfoOn ? S.lfoDepth * 2400 * (S.lfoShape === 'saw' ? -1 : 1) : 0;
+    c.lfoAmt.gain.value = S.lfoOn && S.filterOn ? S.lfoDepth * 2400 * (S.lfoShape === 'saw' ? -1 : 1) : 0;
   };
 
   E.applyChain = function (c) {
@@ -116,10 +136,13 @@ window.BT = window.BT || {};
       for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; curve[i] = Math.tanh(x * (1 + k)) / norm; }
       c.shaper.curve = curve;
     }
+    // filter off = a clean bypass path, not just a wide-open filter
+    c.filterWet.gain.value = S.filterOn ? 1 : 0;
+    c.filterDry.gain.value = S.filterOn ? 0 : 1;
     c.filter.type = S.filterType;
     let freq = 20 * Math.pow(2, S.cutoff * 10);
     if (S.filterType === 'lowpass' && S.cutoff >= 0.999) freq = 22000;
-    if (S.lfoOn) freq *= Math.pow(2, -2 * S.lfoDepth);
+    if (S.lfoOn && S.filterOn) freq *= Math.pow(2, -2 * S.lfoDepth);
     c.filter.frequency.value = Math.min(22000, freq);
     c.filter.Q.value = 0.5 + S.res * 16;
     E.applyLfo(c);
@@ -210,10 +233,18 @@ window.BT = window.BT || {};
     ctxState.sub = { choke, src: osc, end };
   };
 
+  // Sidechain: dip the sub under a trigger chop, then let it swell back over scRelease.
+  E.duckSub = function (chain, t) {
+    const g = chain.subDuck.gain;
+    g.cancelScheduledValues(t);
+    g.setTargetAtTime(1 - S.scDepth, t, 0.003);
+    g.setTargetAtTime(1, t + 0.03, Math.max(0.01, S.scRelease) / 3);
+  };
+
   // Schedules one pattern step (an array of hits that sound together). ctxState carries the
   // voices of the previous step (for choke), the sub voice and an RNG for humanize/chance.
   // Choke cuts hits from earlier steps, never hits stacked on the same step.
-  E.scheduleStep = function (ctx, dest, step, t, stepDur, ctxState, subDest) {
+  E.scheduleStep = function (ctx, dest, step, t, stepDur, ctxState, chain) {
     const hits = (step || []).filter((h) => h && S.slices[h.s] && (h.c == null || h.c >= 1 || ctxState.rng() < h.c));
     if (!hits.length) return [];
     if (S.choke) (ctxState.last || []).forEach((v) => E.chokeVoice(v, t));
@@ -233,7 +264,10 @@ window.BT = window.BT || {};
       }
       if (S.slices[hit.s].label === 'K' && !hit.p) kicked = Math.max(kicked, hit.v);
     });
-    if (S.sub && kicked && subDest) E.playSub(ctx, subDest, t, kicked, ctxState);
+    if (S.sub && chain) {
+      if (hits.some((h) => S.slices[h.s].sc)) E.duckSub(chain, t);
+      if (kicked) E.playSub(ctx, chain.subIn, t, kicked, ctxState);
+    }
     ctxState.last = voices;
     return voices;
   };
@@ -278,7 +312,7 @@ window.BT = window.BT || {};
         ? repeat.start + ((stepIdx - repeat.start) % repeat.len + repeat.len) % repeat.len
         : stepIdx;
       const t = E.stepTime(idx, nextTime, stepDur, liveState.rng);
-      const voices = S.slices.length ? E.scheduleStep(ctx, E.chain.input, pat.steps[idx], t, stepDur, liveState, E.chain.subIn) : [];
+      const voices = S.slices.length ? E.scheduleStep(ctx, E.chain.input, pat.steps[idx], t, stepDur, liveState, E.chain) : [];
       E.queue.push({ time: nextTime, slot: S.playSlot, step: idx, voices });
       nextTime += stepDur;
       stepIdx++;
@@ -347,7 +381,7 @@ window.BT = window.BT || {};
     let base = 0;
     slots.forEach((s) => {
       S.patterns[s].steps.forEach((step, i) => {
-        E.scheduleStep(off, chain.input, step, E.stepTime(i, base + i * stepDur, stepDur, st.rng), stepDur, st, chain.subIn);
+        E.scheduleStep(off, chain.input, step, E.stepTime(i, base + i * stepDur, stepDur, st.rng), stepDur, st, chain);
       });
       base += S.patterns[s].steps.length * stepDur;
     });

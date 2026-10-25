@@ -62,7 +62,7 @@
       </div>
       <div class="spacer"></div>
       <div class="knob" data-key="sensitivity" data-label="SENSITIVITY" data-min="0" data-max="1" data-def="0.5"></div>
-      <div class="knob" data-key="fade" data-label="FADE" data-min="0" data-max="1" data-def="0.15"></div>
+      <div class="knob" data-key="fade" data-label="FADE" data-min="0" data-max="1" data-def="0.06"></div>
       <div class="knob" data-key="volume" data-label="VOLUME" data-min="0" data-max="1.5" data-def="0.8"></div>
     </div>
 
@@ -72,7 +72,7 @@
         <div class="seg" id="labelSeg">
           <button data-v="K" title="Kick">K</button><button data-v="S" title="Snare">S</button><button data-v="H" title="Hat / ride">H</button><button data-v="G" title="Ghost snare">G</button><button data-v="C" title="Crash / cymbal">C</button>
         </div>
-        <div class="seg"><button class="toggle" data-key="slice.rev">REVERSE</button></div>
+        <div class="seg"><button class="toggle" data-key="slice.rev">REVERSE</button><button class="toggle" data-key="slice.sc" title="Duck the sub bass whenever this chop plays">SIDECHAIN</button></div>
       </div>
       <div class="knob" data-key="slice.pitch" data-label="PITCH" data-min="-24" data-max="24" data-def="0" data-step="1" data-unit="st"></div>
       <div class="knob" data-key="slice.gain" data-label="GAIN" data-min="0" data-max="2" data-def="1"></div>
@@ -173,7 +173,7 @@
           <div class="seg"><button class="toggle" data-key="bits12">12 BIT</button><button class="toggle" data-key="bits8">8 BIT</button><button class="toggle" data-key="mono">MONO</button></div>
         </div>
       </div>
-      <div class="sec-head" style="margin-top:14px"><span class="num">5</span><span class="sec-title">SUB BASS</span><span class="hint">A sine sub that plays on every kick hit</span></div>
+      <div class="sec-head" style="margin-top:14px"><span class="num">5</span><span class="sec-title">SUB BASS</span><span class="hint">A sine sub on every kick · sidechain ducks it under chosen chops (or single chops via SIDECHAIN in the slice panel)</span></div>
       <div class="row">
         <div class="group">
           <div class="glabel">SUB</div>
@@ -186,12 +186,21 @@
         <div class="knob" data-key="subLevel" data-label="LEVEL" data-min="0" data-max="1" data-def="0.7"></div>
         <div class="knob" data-key="subDecay" data-label="DECAY" data-min="0.05" data-max="1" data-def="0.45"></div>
       </div>
+      <div class="row">
+        <div class="group">
+          <div class="glabel">SIDECHAIN TO</div>
+          <div class="seg small"><button data-sc="K" title="Mark every kick chop as a trigger">KICKS</button><button data-sc="S" title="Mark every snare chop as a trigger">SNARES</button><button data-sc="H" title="Mark every hat chop as a trigger">HATS</button><button data-sc="none">CLEAR</button></div>
+        </div>
+        <div class="knob" data-key="scDepth" data-label="DUCK" data-min="0" data-max="1" data-def="0.8"></div>
+        <div class="knob" data-key="scRelease" data-label="RELEASE" data-min="0.03" data-max="1" data-def="0.25"></div>
+      </div>
     </div>
     <div class="half">
       <div class="sec-head"><span class="num">4</span><span class="sec-title">MIX FX</span></div>
       <div class="row">
         <div class="group">
           <div class="glabel">FILTER</div>
+          <div class="seg"><button class="toggle" data-key="filterOn" title="Filter is bypassed until switched on">ON</button></div>
           <div class="seg" data-key="filterType"><button data-v="lowpass">LP</button><button data-v="highpass">HP</button><button data-v="bandpass">BP</button></div>
         </div>
         <div class="knob" data-key="cutoff" data-label="CUTOFF" data-min="0" data-max="1" data-def="1" data-fmt="hz"></div>

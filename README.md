@@ -29,10 +29,13 @@ Runs fully offline.
   with fills every 8 bars).
 - **Undo / redo** (Ctrl+Z / Ctrl+Y), 25 steps deep.
 - **Beat repeat:** hold 1/4, 1/8, 1/16 or 1/32 (or keys 5-8) to loop the current slice of the groove live.
-- **Sub bass:** a sine sub in any key that plays on every kick, with glide and decay.
+- **Sub bass:** a sine sub in any key that plays on every kick, with glide and decay, and a **sidechain** that ducks it
+  under any chops you mark (one by one, or all kicks / snares / hats) with duck depth and release.
+- **Clean imports:** every newly loaded break starts from default settings: 120 BPM, filter off, no drive / comp /
+  room, no sample-rate or bit crush, fresh patterns.
 - **Per-slice** pitch, gain, pan, length and reverse; 16 keyboard pads with live record.
 - **Sampler character:** sample-rate reduction (32k–8k), 12-bit / 8-bit, mono.
-- **Mix FX:** LP/HP/BP filter with resonance and a tempo-synced LFO sweep (sine/tri/saw/square, 1/4 to 4 bars),
+- **Mix FX:** switchable LP/HP/BP filter (off by default) with resonance and a tempo-synced LFO sweep (sine/tri/saw/square, 1/4 to 4 bars),
   drive, compressor, room.
 - **Tempo:** song BPM with optional repitch (sampler-style) or fixed-pitch chops; swing and humanize.
 - **Export:** rendered WAV loop, MIDI (slice 1 = C1 / note 36; drag or click), or a zip kit of every slice + MIDI + loop.
