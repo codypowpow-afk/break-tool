@@ -21,9 +21,9 @@ Runs fully offline.
   - Other common: Rock, Shuffle, Reggae, Hip-Hop, Samba, Motown, Metal
   - More popular rhythms: Disco, UK Drill, Amapiano, Dancehall, Cumbia, Bhangra, Punk
   Density, Variety (how many different chops a pattern uses), Chaos, Mutate and New Take shape the result.
-- **CHOP STAMP** (key `P`): switch it on, then left-click any chop on the waveform or pads to paint it at its original
-  spot, holding the grid for its chopped length. Click it again to remove it. Stamp chops in order to rebuild the
-  break, or stamp single chops over a generated pattern.
+- **CHOP STAMP** (key `P`): switching it on clears the current pattern. Each chop you then left-click on the waveform
+  or pads is written in order from the start of the pattern for its chopped length (snapped to the grid setting),
+  so you build a new break chop by chop. A green cursor shows where the next chop goes; Ctrl+Z steps back.
 - **Fills:** 10 fill types (or Auto to follow the variant), 1 beat / 2 beats / 1 bar long, every 2 / 4 / 8 bars or
   only at the end.
 - **Step grid** on 32nd notes, painted at 1/8, 1/16 or 1/32, with any number of stacked hits per step and per-hit

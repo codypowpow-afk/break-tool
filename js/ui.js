@@ -31,7 +31,7 @@
   // Calls with the same tag in quick succession (a knob drag, a paint stroke) merge into one step.
   const UNDO_LIMIT = 25;
   const UNDO_FIELDS = ['patterns', 'slices', 'editSlot', 'sel', 'manual', 'style', 'variant', 'patLen', 'origBpm', 'bars',
-    'sliceMode', 'evenCount', 'sensitivity', 'density', 'chaos', 'variety', 'fill', 'seedSalt', 'fillType', 'fillLen', 'fillEvery'];
+    'sliceMode', 'evenCount', 'sensitivity', 'density', 'chaos', 'variety', 'fill', 'seedSalt', 'fillType', 'fillLen', 'fillEvery', 'stampPos'];
   const UNDO_KEYS = ['sliceMode', 'evenCount', 'sensitivity', 'bars', 'density', 'chaos', 'variety', 'fill', 'patLen', 'fillType', 'fillLen', 'fillEvery'];
   const undoStack = [], redoStack = [];
   let lastTag = null, lastTagTime = 0;
@@ -102,7 +102,7 @@
       case 'rate': case 'bits12': case 'bits8': case 'mono':
         E.rebuildProcessed(); waveStaticDirty = true; break;
       case 'density': case 'chaos': case 'variety': case 'fill': regenerate(S.editSlot); break;
-      case 'stamp': toast(S.stamp ? 'CHOP STAMP on: click chops to paint them in place' : 'CHOP STAMP off'); break;
+      case 'stamp': if (S.stamp) startStamp(); else toast('CHOP STAMP off'); break;
       case 'fillType': case 'fillLen': case 'fillEvery': S.fill = true; regenerate(S.editSlot); break;
       case 'patLen': resizePattern(); break;
     }
@@ -650,6 +650,13 @@
       }
     }
     c.fillStyle = '#8aa57f'; c.fillText(['A', 'B', 'C', 'D'][S.editSlot] + ' ' + (pat ? pat.steps.length / BAR : 0) + 'BAR', 4, GHEAD - 4);
+    // CHOP STAMP cursor: where the next clicked chop will be written
+    if (S.stamp && pat && S.stampPos < pat.steps.length && S.stampPos >= g.off && S.stampPos < g.off + g.span) {
+      const cx = GLEFT + ((S.stampPos - g.off) / g.res) * g.cw;
+      c.fillStyle = '#3fd36b';
+      c.fillRect(cx - 1, 0, 3, g.H);
+      c.beginPath(); c.moveTo(cx - 5, 0); c.lineTo(cx + 5, 0); c.lineTo(cx, 7); c.fill();
+    }
     // playhead
     if (playhead && S.playing && playhead.slot === S.editSlot && playhead.step >= g.off && playhead.step < g.off + g.span) {
       c.fillStyle = 'rgba(210,60,44,.35)';
@@ -739,34 +746,39 @@
     } else if (!colHits(pat, p.idx, p.g.res).some((o) => o.h.s === p.row)) addHit(pat.steps[p.idx], p.row);
     pat.edited = true; dirty = true;
   }
-  // CHOP STAMP: paint chop i at the spot it occupied in the original break, holding the grid
-  // for its chopped length (the steps it covers are cleared so it plays through untouched).
-  // Stamping the same chop on the same spot again removes it.
+  // CHOP STAMP: a sequential writer. Switching it on clears the current pattern and puts the
+  // cursor (S.stampPos) at the start; each chop clicked is written at the cursor for its chopped
+  // length (snapped to the grid resolution, at least one grid cell) and the cursor moves on,
+  // so chops fill the pattern from start to end in the order they're clicked.
+  function startStamp() {
+    const pat = curPat();
+    if (!pat) return;
+    checkpoint();
+    pat.steps = pat.steps.map((st, i) => (pat.locks[i] ? st : []));
+    pat.edited = true;
+    S.stampPos = 0;
+    setPage(0);
+    dirty = true;
+    toast('CHOP STAMP on: pattern cleared, click chops to fill it in order');
+  }
   function stampChop(i) {
     const pat = curPat(), sl = S.slices[i];
     if (!pat || !sl || !S.src) return;
-    const sr = S.src.sampleRate, stepSec = 60 / S.origBpm / 4 / BT.RES;
-    const srcLen = Math.max(1, Math.round(S.src.length / sr / stepSec));
-    const at = Math.round(sl.pos / sr / stepSec) % srcLen;
-    const len = Math.max(1, Math.round(((E.sliceEnd(i) - sl.pos) / sr / stepSec) * sl.decay));
-    const N = pat.steps.length;
-    // where that spot lands in this pattern: prefer the occurrence on the page being viewed
-    const spots = [];
-    if (srcLen >= N) spots.push(at % N);
-    else for (let k = at; k < N; k += srcLen) spots.push(k);
-    const v = gridView();
-    const idx = spots.find((k) => k >= v.off && k < v.off + v.span) ?? spots[0];
+    const N = pat.steps.length, pos = S.stampPos || 0;
+    if (pos >= N) { toast('Pattern full: Ctrl+Z to step back, or toggle CHOP STAMP to start over'); return; }
+    // chopped length in grid steps at the break's own tempo, snapped to the grid setting
+    const stepSec = 60 / S.origBpm / 4 / BT.RES, res = S.gridRes;
+    const raw = ((E.sliceEnd(i) - sl.pos) / S.src.sampleRate / stepSec) * sl.decay;
+    const len = Math.min(N - pos, Math.max(res, Math.round(raw / res) * res));
     checkpoint();
-    const existing = pat.steps[idx].findIndex((h) => h.s === i && h.len);
-    if (existing >= 0) {
-      pat.steps[idx].splice(existing, 1);
-      toast('Removed chop ' + (i + 1));
-    } else {
-      for (let k = idx; k < Math.min(N, idx + len); k++) if (!pat.locks[k]) pat.steps[k] = [];
-      pat.steps[idx].push({ s: i, v: 1, p: 0, r: false, roll: 1, len });
-      toast('Stamped chop ' + (i + 1) + ' at bar ' + (Math.floor(idx / BAR) + 1) + ' (' + len + ' x 1/32)');
-    }
-    pat.edited = true; dirty = true;
+    for (let k = pos; k < pos + len; k++) if (!pat.locks[k]) pat.steps[k] = [];
+    pat.steps[pos].push({ s: i, v: 1, p: 0, r: false, roll: 1, len });
+    pat.edited = true;
+    S.stampPos = pos + len;
+    if (S.follow) setPage(Math.floor(Math.min(S.stampPos, N - 1) / PAGE));
+    const where = (k) => 'bar ' + (Math.floor(k / BAR) + 1) + '.' + (Math.floor((k % BAR) / BEAT) + 1);
+    toast('Chop ' + (i + 1) + ' at ' + where(pos) + (S.stampPos >= N ? ' - pattern full' : ', next at ' + where(S.stampPos)));
+    dirty = true;
   }
 
   // Steps hold any number of hits (one per slice), kept in slice order.
