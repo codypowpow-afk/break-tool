@@ -117,3 +117,5 @@ select { background: var(--btn); border: 1px solid var(--btn-edge); border-radiu
   .styles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .pads { grid-template-columns: repeat(4, 46px); }
 }
+
+.btn.stamp.on { background: #2f8f4e; border-color: #1f6a37; box-shadow: 0 2px 0 #1f6a37; }

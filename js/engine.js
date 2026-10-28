@@ -18,7 +18,8 @@ window.BT = window.BT || {};
     // playback
     choke: true, fade: 0.06, volume: 0.8, swing: 0, human: 0,
     // pattern
-    style: 'twostep', variant: 1, density: 0.5, chaos: 0, fill: false, seedSalt: 0,
+    style: 'twostep', variant: 1, density: 0.5, chaos: 0, variety: 0.6, fill: false, seedSalt: 0,
+    stamp: false, // CHOP STAMP painting mode
     fillType: 0, fillLen: 4, fillEvery: 8,
     patterns: [null, null, null, null], editSlot: 0, playSlot: 0, chain: false, patLen: 2,
     gridPage: 0, follow: true, gridRes: 2,
@@ -38,7 +39,7 @@ window.BT = window.BT || {};
   // Everything a freshly loaded break resets to, so imports always start clean.
   // (Volume, the break list and view settings like FOLLOW are left alone.)
   const RESET_KEYS = ['songBpm', 'repitch', 'bars', 'sliceMode', 'evenCount', 'sensitivity', 'choke', 'fade', 'swing', 'human',
-    'style', 'variant', 'density', 'chaos', 'fill', 'seedSalt', 'fillType', 'fillLen', 'fillEvery', 'patLen', 'gridRes', 'lane',
+    'style', 'variant', 'density', 'chaos', 'variety', 'fill', 'seedSalt', 'stamp', 'fillType', 'fillLen', 'fillEvery', 'patLen', 'gridRes', 'lane',
     'rate', 'bits', 'mono', 'filterOn', 'filterType', 'cutoff', 'res', 'drive', 'comp', 'room',
     'lfoOn', 'lfoRate', 'lfoShape', 'lfoDepth', 'sub', 'subKey', 'subLevel', 'subDecay', 'subGlide', 'scDepth', 'scRelease'];
   const DEFAULTS = JSON.parse(JSON.stringify(RESET_KEYS.reduce((o, k) => { o[k] = S[k]; return o; }, {})));

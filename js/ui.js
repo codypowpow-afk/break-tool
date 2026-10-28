@@ -31,8 +31,8 @@
   // Calls with the same tag in quick succession (a knob drag, a paint stroke) merge into one step.
   const UNDO_LIMIT = 25;
   const UNDO_FIELDS = ['patterns', 'slices', 'editSlot', 'sel', 'manual', 'style', 'variant', 'patLen', 'origBpm', 'bars',
-    'sliceMode', 'evenCount', 'sensitivity', 'density', 'chaos', 'fill', 'seedSalt', 'fillType', 'fillLen', 'fillEvery'];
-  const UNDO_KEYS = ['sliceMode', 'evenCount', 'sensitivity', 'bars', 'density', 'chaos', 'fill', 'patLen', 'fillType', 'fillLen', 'fillEvery'];
+    'sliceMode', 'evenCount', 'sensitivity', 'density', 'chaos', 'variety', 'fill', 'seedSalt', 'fillType', 'fillLen', 'fillEvery'];
+  const UNDO_KEYS = ['sliceMode', 'evenCount', 'sensitivity', 'bars', 'density', 'chaos', 'variety', 'fill', 'patLen', 'fillType', 'fillLen', 'fillEvery'];
   const undoStack = [], redoStack = [];
   let lastTag = null, lastTagTime = 0;
   function snapshot() {
@@ -101,7 +101,8 @@
         E.updateChain(); break;
       case 'rate': case 'bits12': case 'bits8': case 'mono':
         E.rebuildProcessed(); waveStaticDirty = true; break;
-      case 'density': case 'chaos': case 'fill': regenerate(S.editSlot); break;
+      case 'density': case 'chaos': case 'variety': case 'fill': regenerate(S.editSlot); break;
+      case 'stamp': toast(S.stamp ? 'CHOP STAMP on: click chops to paint them in place' : 'CHOP STAMP off'); break;
       case 'fillType': case 'fillLen': case 'fillEvery': S.fill = true; regenerate(S.editSlot); break;
       case 'patLen': resizePattern(); break;
     }
@@ -333,7 +334,7 @@
 
   // ---------- patterns ----------
   function genOpts(style, variant, prev) {
-    return { style, variant, bars: S.patLen, density: S.density, chaos: S.chaos, fill: S.fill,
+    return { style, variant, bars: S.patLen, density: S.density, chaos: S.chaos, variety: S.variety, fill: S.fill,
       fillType: S.fillType, fillLen: S.fillLen, fillEvery: S.fillEvery, salt: S.seedSalt, prev };
   }
   function regenerate(slot) {
@@ -485,7 +486,11 @@
       if (e.altKey) { deleteMarker(i); return; }
       selectSlice(i, true);
       if (i > 0 && !S.locked) { drag = { i, moved: false }; wave.setPointerCapture(e.pointerId); }
-    } else selectSlice(sliceAtSample(xToS(x, W)), true);
+    } else {
+      const i = sliceAtSample(xToS(x, W));
+      selectSlice(i, true);
+      if (S.stamp) stampChop(i);
+    }
   });
   wave.addEventListener('pointermove', (e) => {
     const r = wave.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
@@ -662,6 +667,14 @@
       c.fillRect(x, y, w, h);
       c.globalAlpha = 1;
       if (sub) { c.strokeStyle = '#eaffd0'; c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1); }
+      if (st.len > 1) {
+        // stamped chop: a tail across the steps it holds
+        const tw = Math.min(g.W - x - w, ((st.len - 1) / g.res) * g.cw);
+        c.fillStyle = LCOL[S.slices[st.s].label];
+        c.globalAlpha = 0.45;
+        c.fillRect(x + w, y + h * 0.3, tw, Math.max(2, h * 0.4));
+        c.globalAlpha = 1;
+      }
       if (st.c != null && st.c < 1 && w > 6) { c.fillStyle = '#111'; c.fillRect(x + 1, y + h - 2, (w - 2) * st.c, 2); }
       if (st.roll > 1) {
         c.fillStyle = '#111';
@@ -726,6 +739,36 @@
     } else if (!colHits(pat, p.idx, p.g.res).some((o) => o.h.s === p.row)) addHit(pat.steps[p.idx], p.row);
     pat.edited = true; dirty = true;
   }
+  // CHOP STAMP: paint chop i at the spot it occupied in the original break, holding the grid
+  // for its chopped length (the steps it covers are cleared so it plays through untouched).
+  // Stamping the same chop on the same spot again removes it.
+  function stampChop(i) {
+    const pat = curPat(), sl = S.slices[i];
+    if (!pat || !sl || !S.src) return;
+    const sr = S.src.sampleRate, stepSec = 60 / S.origBpm / 4 / BT.RES;
+    const srcLen = Math.max(1, Math.round(S.src.length / sr / stepSec));
+    const at = Math.round(sl.pos / sr / stepSec) % srcLen;
+    const len = Math.max(1, Math.round(((E.sliceEnd(i) - sl.pos) / sr / stepSec) * sl.decay));
+    const N = pat.steps.length;
+    // where that spot lands in this pattern: prefer the occurrence on the page being viewed
+    const spots = [];
+    if (srcLen >= N) spots.push(at % N);
+    else for (let k = at; k < N; k += srcLen) spots.push(k);
+    const v = gridView();
+    const idx = spots.find((k) => k >= v.off && k < v.off + v.span) ?? spots[0];
+    checkpoint();
+    const existing = pat.steps[idx].findIndex((h) => h.s === i && h.len);
+    if (existing >= 0) {
+      pat.steps[idx].splice(existing, 1);
+      toast('Removed chop ' + (i + 1));
+    } else {
+      for (let k = idx; k < Math.min(N, idx + len); k++) if (!pat.locks[k]) pat.steps[k] = [];
+      pat.steps[idx].push({ s: i, v: 1, p: 0, r: false, roll: 1, len });
+      toast('Stamped chop ' + (i + 1) + ' at bar ' + (Math.floor(idx / BAR) + 1) + ' (' + len + ' x 1/32)');
+    }
+    pat.edited = true; dirty = true;
+  }
+
   // Steps hold any number of hits (one per slice), kept in slice order.
   function addHit(step, s) {
     if (step.some((h) => h.s === s)) return;
@@ -806,7 +849,7 @@
       pads.innerHTML = '';
       for (let k = 0; k < 16; k++) {
         const d = document.createElement('div'); d.className = 'pad'; d.dataset.k = k;
-        d.addEventListener('pointerdown', () => triggerPad(k));
+        d.addEventListener('pointerdown', () => { triggerPad(k); if (S.stamp && S.slices[padBank * 16 + k]) stampChop(padBank * 16 + k); });
         pads.appendChild(d);
       }
     }
@@ -1013,7 +1056,8 @@
     if (REPEAT_KEYS[k]) { E.setRepeat(REPEAT_KEYS[k]); $('[data-rep="' + REPEAT_KEYS[k] + '"]').classList.add('on'); return; }
     const pi = PAD_KEYS.indexOf(k);
     if (pi >= 0) { triggerPad(pi); return; }
-    if (k === 'm') mutate();
+    if (k === 'p') set('stamp', !S.stamp);
+    else if (k === 'm') mutate();
     else if (k === 'n') newTake();
     else if (k === 'delete' || k === 'backspace') { if (!S.locked) deleteMarker(S.sel); }
     else if (k === 'arrowleft') selectSlice(Math.max(0, S.sel - 1), true);

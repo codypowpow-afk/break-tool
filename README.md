@@ -20,7 +20,10 @@ Runs fully offline.
   - EDM / dance: Dubstep, UK Garage, Electro, Jersey Club, Footwork, Gqom, Hardstyle
   - Other common: Rock, Shuffle, Reggae, Hip-Hop, Samba, Motown, Metal
   - More popular rhythms: Disco, UK Drill, Amapiano, Dancehall, Cumbia, Bhangra, Punk
-  Density, Chaos, Mutate and New Take shape the result.
+  Density, Variety (how many different chops a pattern uses), Chaos, Mutate and New Take shape the result.
+- **CHOP STAMP** (key `P`): switch it on, then left-click any chop on the waveform or pads to paint it at its original
+  spot, holding the grid for its chopped length. Click it again to remove it. Stamp chops in order to rebuild the
+  break, or stamp single chops over a generated pattern.
 - **Fills:** 10 fill types (or Auto to follow the variant), 1 beat / 2 beats / 1 bar long, every 2 / 4 / 8 bars or
   only at the end.
 - **Step grid** on 32nd notes, painted at 1/8, 1/16 or 1/32, with any number of stacked hits per step and per-hit
@@ -40,7 +43,7 @@ Runs fully offline.
 - **Tempo:** song BPM with optional repitch (sampler-style) or fixed-pitch chops; swing and humanize.
 - **Export:** rendered WAV loop, MIDI (slice 1 = C1 / note 36; drag or click), or a zip kit of every slice + MIDI + loop.
 
-Keys: `Space` play/stop · `5-8` hold beat repeat · `Ctrl+Z` undo · `Ctrl+Y` redo · `1-4 Q-R A-F Z-V` pads · `M` mutate · `N` new take · `Del` delete marker · `←/→` select slice.
+Keys: `Space` play/stop · `P` chop stamp · `5-8` hold beat repeat · `Ctrl+Z` undo · `Ctrl+Y` redo · `1-4 Q-R A-F Z-V` pads · `M` mutate · `N` new take · `Del` delete marker · `←/→` select slice.
 
 ## Build the exe
 

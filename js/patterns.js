@@ -596,35 +596,75 @@ window.BT = window.BT || {};
     return steps;
   }
 
-  function fromTemplate(kit, slices, tmpl, N, density, rng) {
+  // Chooses which chop of a type plays at step i. With VARIETY at 0 every hit uses the main
+  // chop; higher values pull in the rest of the kit. Variants rotate through three strategies:
+  //  from the break - the chop of that type that sat nearest this spot in the original break
+  //  per beat       - chops rotate beat by beat
+  //  shuffled       - a seeded shuffle, repeating every 2 bars
+  // Choices repeat every 2 bars so the groove stays coherent.
+  function makePicker(kit, slices, rng, variety, variant) {
+    const pools = { K: kit.K, S: kit.S, G: kit.ghosts, H: kit.hats, C: kit.C.length ? kit.C : kit.hats };
+    const mains = { K: kit.mainK, S: kit.mainS, G: kit.mainG, H: kit.mainH, C: kit.crash };
+    const strategy = (variant - 1) % 3;
+    const shift = ((variant - 1) * 8) % kit.srcSteps; // later variants read from later in the break
+    const rot = rng.int(16);
+    const memo = {};
+    const nearest = (pool, at) => {
+      let best = pool[0], bd = Infinity;
+      pool.forEach((c) => {
+        const d0 = Math.abs(slices[c].origStep - at) % kit.srcSteps;
+        const d = Math.min(d0, kit.srcSteps - d0);
+        if (d < bd) { bd = d; best = c; }
+      });
+      return best;
+    };
+    return function (role, i) {
+      const pool = pools[role];
+      if (!pool || pool.length < 2) return mains[role];
+      const key = role + (i % 32);
+      if (memo[key] != null) return memo[key];
+      // the bar's downbeat kick and the main backbeat stay put more often: they carry the groove
+      const anchorHit = (role === 'K' && i % 16 === 0) || (role === 'S' && i % 8 === 4);
+      let pick = mains[role];
+      if (rng() < variety * (anchorHit ? 0.5 : 1)) {
+        if (strategy === 0) pick = nearest(pool, (i + shift) % kit.srcSteps);
+        else if (strategy === 1) pick = pool[(Math.floor(i / 4) + rot) % pool.length];
+        else pick = pool[rng.int(pool.length)];
+      }
+      memo[key] = pick;
+      return pick;
+    };
+  }
+
+  function fromTemplate(kit, slices, tmpl, N, density, rng, variety, variant) {
     const steps = new Array(N).fill(null);
+    const pick = makePicker(kit, slices, rng, variety, variant);
     const altKs = kit.K.filter((i) => i !== kit.mainK), altSs = kit.S.filter((i) => i !== kit.mainS);
-    // pick the alternates once so a pattern keeps a consistent sound
-    const altK = altKs.length ? rng.pick(altKs) : kit.mainK;
-    const altS = altSs.length ? rng.pick(altSs) : kit.mainS;
+    const altK = (i) => (altKs.length ? altKs[(Math.floor(i / 4) + variant) % altKs.length] : pick('K', i));
+    const altS = (i) => (altSs.length ? altSs[(Math.floor(i / 4) + variant) % altSs.length] : pick('S', i));
     const ghostVel = kit.G.length ? 0.8 : 0.4;
     let anchor = null;
     for (let i = 0; i < N; i++) {
       const ch = tmpl[i % tmpl.length];
       let st = null;
       switch (ch) {
-        case 'K': st = mk(kit.mainK, 1); break;
-        case 'k': st = mk(altK, 0.85); break;
-        case 'S': st = mk(kit.mainS, 1); break;
-        case 's': st = mk(altS, 0.8); break;
-        case 'g': st = mk(kit.mainG, ghostVel); break;
-        case 'h': st = mk(kit.mainH, 0.8); break;
-        case 'o': st = mk(kit.altH, 0.8); break;
-        case 'q': st = mk(kit.mainH, 0.7, { roll: 2 }); break;
-        case 'Q': st = mk(kit.mainH, 0.7, { roll: 3 }); break;
-        case 'X': st = [mk(kit.mainK, 1), mk(kit.mainS, 1)]; break;
-        case 'Y': st = [mk(kit.mainK, 1), mk(kit.mainH, 0.8)]; break;
-        case 'Z': st = [mk(kit.mainK, 1), mk(altS, 0.85)]; break;
-        case 't': st = mk(kit.mainK, 0.85, { p: 5 }); break;
-        case 'T': st = mk(kit.mainK, 0.85, { p: 9 }); break;
-        case 'c': st = mk(kit.crash, 0.85); break;
-        case 'W': st = [mk(kit.mainK, 1), mk(kit.crash, 0.85)]; break;
-        case 'r': st = mk(kit.mainS, 0.9, { r: true }); break;
+        case 'K': st = mk(pick('K', i), 1); break;
+        case 'k': st = mk(altK(i), 0.85); break;
+        case 'S': st = mk(pick('S', i), 1); break;
+        case 's': st = mk(altS(i), 0.8); break;
+        case 'g': st = mk(pick('G', i), ghostVel); break;
+        case 'h': st = mk(pick('H', i), 0.8); break;
+        case 'o': st = mk(kit.altH !== kit.mainH && rng() > variety ? kit.altH : pick('H', i + 1), 0.8); break;
+        case 'q': st = mk(pick('H', i), 0.7, { roll: 2 }); break;
+        case 'Q': st = mk(pick('H', i), 0.7, { roll: 3 }); break;
+        case 'X': st = [mk(pick('K', i), 1), mk(pick('S', i), 1)]; break;
+        case 'Y': st = [mk(pick('K', i), 1), mk(pick('H', i), 0.8)]; break;
+        case 'Z': st = [mk(pick('K', i), 1), mk(altS(i), 0.85)]; break;
+        case 't': st = mk(pick('K', i), 0.85, { p: 5 }); break;
+        case 'T': st = mk(pick('K', i), 0.85, { p: 9 }); break;
+        case 'c': st = mk(pick('C', i), 0.85); break;
+        case 'W': st = [mk(pick('K', i), 1), mk(pick('C', i), 0.85)]; break;
+        case 'r': st = mk(pick('S', i), 0.9, { r: true }); break;
         case '-': st = null; break;
         default: {
           if (density <= 0) break;
@@ -638,10 +678,10 @@ window.BT = window.BT || {};
               break;
             }
           }
-          // otherwise a steady hat: offbeat 8ths first, then on-beats, then 16ths
-          if (pos === 2 && rng() < Math.min(1, density * 1.6)) st = mk(kit.mainH, 0.85);
-          else if (pos === 0 && rng() < density * 0.5) st = mk(kit.mainH, 0.65);
-          else if (pos % 2 === 1 && rng() < Math.max(0, (density - 0.5) * 1.4)) st = mk(kit.altH, 0.5);
+          // otherwise a hat: offbeat 8ths first, then on-beats, then 16ths
+          if (pos === 2 && rng() < Math.min(1, density * 1.6)) st = mk(pick('H', i), 0.85);
+          else if (pos === 0 && rng() < density * 0.5) st = mk(pick('H', i), 0.65);
+          else if (pos % 2 === 1 && rng() < Math.max(0, (density - 0.5) * 1.4)) st = mk(pick('H', i + 1), 0.5);
         }
       }
       steps[i] = st;
@@ -714,7 +754,8 @@ window.BT = window.BT || {};
     if (opts.style === 'asplayed') steps = asPlayed(kit, N, opts.variant, rng);
     else {
       const density = opts.style === 'roller' ? Math.max(opts.density, 0.65) : opts.density;
-      steps = fromTemplate(kit, slices, T[opts.style][opts.variant - 1], N, density, rng);
+      const variety = opts.variety == null ? 0.6 : opts.variety;
+      steps = fromTemplate(kit, slices, T[opts.style][opts.variant - 1], N, density, rng, variety, opts.variant);
     }
     applyChaos(steps, kit, slices, opts.chaos, rng);
     if (opts.fill && N >= 8) {
@@ -789,7 +830,7 @@ window.BT = window.BT || {};
         step.forEach((st) => {
           const n = st.roll || 1;
           for (let k = 0; k < n; k++) {
-            ev.push({ step: base + (i + (k * BT.RES) / n) / BT.RES, len: n > 1 ? 1 / n : Math.min(next / BT.RES, 4), note: 36 + st.s, vel: st.v });
+            ev.push({ step: base + (i + (k * BT.RES) / n) / BT.RES, len: n > 1 ? 1 / n : st.len ? st.len / BT.RES : Math.min(next / BT.RES, 4), note: 36 + st.s, vel: st.v });
           }
         });
       });
